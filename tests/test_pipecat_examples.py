@@ -28,7 +28,8 @@ def make_wav(path, *, channels=1):
 
 
 async def command(*args, endpoint=None):
-    env = {**os.environ, "ORUK_API_KEY": "example-local-key"}
+    # Pipes otherwise use the Windows code page while this harness decodes UTF-8.
+    env = {**os.environ, "ORUK_API_KEY": "example-local-key", "PYTHONIOENCODING": "utf-8"}
     if endpoint:
         env["ORUK_REALTIME_URL"] = endpoint
     process = await asyncio.create_subprocess_exec(
