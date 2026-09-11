@@ -1,0 +1,67 @@
+{
+  "verified_at": "2026-09-11",
+  "python": "3.12.13",
+  "pipecat": "1.8.1",
+  "adapter_version": "0.1.0.dev0",
+  "environment": "Chrome browser, local SmallWebRTC transport, production Oruk realtime API",
+  "model": "oruk-realtime",
+  "sample_url": "https://oruk.ai/samples/oruk-quickstart.wav",
+  "sample_sha256": "fc25b0bd24fd7b6748ca9c6f6c2837df41873fe5dd680a54584e7b8c16b69140",
+  "completed_requests": [
+    "b1d84071d0e1401fa5a1610c642b4b44",
+    "ca36114109ad460b82c940dfe958198b",
+    "afe7005d660b43fcb8ee4a1afab402fd"
+  ],
+  "interrupted_request": "3baff6a3e50a49f1836838bde4814021",
+  "metering": [
+    {
+      "request_id": "b1d84071d0e1401fa5a1610c642b4b44",
+      "model": "oruk-realtime",
+      "audio_seconds": 3.56,
+      "billable_seconds": 3.56
+    },
+    {
+      "request_id": "ca36114109ad460b82c940dfe958198b",
+      "model": "oruk-realtime",
+      "audio_seconds": 3.58,
+      "billable_seconds": 3.58
+    },
+    {
+      "request_id": "3baff6a3e50a49f1836838bde4814021",
+      "model": "oruk-realtime",
+      "audio_seconds": 1.58,
+      "billable_seconds": 1.58
+    },
+    {
+      "request_id": "afe7005d660b43fcb8ee4a1afab402fd",
+      "model": "oruk-realtime",
+      "audio_seconds": 3.56,
+      "billable_seconds": 3.56
+    }
+  ],
+  "sample_expected_text": "I am genuinely excited that this is finally working.",
+  "observed_final_texts": [
+    "I am genuinely excited that this is finally working.",
+    "I am genuinely excited that this is finally working.",
+    "I am genuinely excited that this is finally working."
+  ],
+  "demo_file": "pipecat-demo.mp4",
+  "demo_duration_seconds": 45.032,
+  "demo_sha256": "55ec752b2354aeda2863a7424f33de29adfe5f522455202ef17ea1a6366bd462",
+  "limitations": [
+    "Public prerecorded sample, not a human microphone conversation",
+    "Not independent model accuracy or production latency evidence",
+    "Uses an internal demo identity; not a customer conversion",
+    "Full LLM/TTS conversation and assistant barge-in remain unverified",
+    "The service was exercised using the prepared 0.1.0.dev0 wheel; compare adapter and transport hashes for later packaging-only versions"
+  ],
+  "adapter_sha256": "a8260a708467db6edfa705aee0a5137f95ff7013d750c54766159fd4cb430b09",
+  "transport_sha256": "2e45aa56731dcd21edc9d0bbbd9faa9d081d80dd68517f41793ff48aec457661",
+  "release_candidate_smoke": {
+    "version": "0.1.0rc1",
+    "request_id": "766a22daab234bf8a9aad89e16c78440",
+    "text": "I am genuinely excited that this is finally working.",
+    "receipt_billable_seconds": 3.56,
+    "scope": "Installed standalone wheel and portable browser example; production transcript, phrase estimate and completed-turn receipt; no separate database reconciliation for this smoke run"
+  }
+}

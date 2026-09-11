@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oruk × Pipecat · WebRTC speech demo</title>
+<style>
+:root{color-scheme:light;font-family:ui-sans-serif,system-ui,sans-serif;background:#f7f5ef;color:#192322}body{max-width:1000px;margin:64px auto;padding:0 28px}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d9ded8;padding-bottom:20px}.wordmark{font-size:34px;font-weight:650;letter-spacing:-2px}h1{font-weight:550;font-size:44px;letter-spacing:-1.5px;max-width:760px}p{line-height:1.6;color:#475851}.controls{display:flex;gap:10px;margin:24px 0;flex-wrap:wrap}button{font:inherit;padding:12px 19px;border:1px solid #83958b;border-radius:8px;background:white;color:#192322;cursor:pointer}button:first-child{background:#235e4c;color:white;border-color:#235e4c}button:disabled{opacity:.4;cursor:default}.grid{display:grid;grid-template-columns:1.1fr 1fr;gap:20px}section{background:#fffdf8;border:1px solid #d9ded8;border-radius:14px;padding:26px;min-height:190px}h2{font-size:14px;color:#506159;text-transform:uppercase;letter-spacing:1px;margin:0 0 20px}#transcript{font-size:25px;line-height:1.5}#estimate{font-size:25px}#receipt{font-size:13px;overflow-wrap:anywhere;margin-top:22px}.muted{color:#728078}ol{padding-left:22px;font-size:13px;line-height:1.8}code{font-family:ui-monospace,monospace}small{font-size:13px}@media(max-width:700px){body{margin:28px auto}.grid{grid-template-columns:1fr}h1{font-size:34px}}
+</style>
+<header><span class="wordmark">oruk</span><span>Pipecat 1.8.1 · WebRTC</span></header>
+<canvas id="recording-canvas" width="1440" height="900" hidden style="width:100%;height:auto;margin-top:20px" aria-label="Live demonstration recording view"></canvas><h1>Live words.<br>Vocal context alongside them.</h1>
+<p>Send a public sample through the browser and Pipecat to Oruk’s realtime API.<br>Real speech inference. No microphone access, language model, or synthetic reply.</p>
+<div class="controls"><button id="connect">Connect</button><button id="play" disabled>Stream sample</button><button id="disconnect" disabled>Disconnect</button><button id="record">Record 45-second demo</button></div>
+<p id="status" role="status">Ready to connect. The API key stays on the server.</p>
+<div class="grid"><section><h2>Transcript</h2><div id="transcript" class="muted">Your sample will appear here.</div><div id="receipt"></div></section><section><h2>Phrase estimate</h2><div id="estimate" class="muted">Waiting for audio</div><p id="scores"></p><small>Scores describe estimated vocal expression. They are not verified feelings or calibrated probabilities.</small></section></div>
+<p><small>Input: <a href="https://oruk.ai/samples/oruk-quickstart.wav">Oruk’s public quickstart recording</a> · <a href="https://oruk.ai/docs">API documentation</a><br>Model: <code>oruk-realtime</code> · September 11, 2026 · Development adapter</small></p>
+<details><summary>Session events</summary><ol id="events"></ol></details>
+<script type="module" src="/demo.js"></script></html>

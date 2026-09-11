@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pipecat-oruk"
+version = "0.1.0rc1"
+description = "Oruk streaming speech and phrase emotion for Pipecat"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+license = "MIT"
+authors = [{name = "oruk labs", email = "access@oruk.ai"}]
+dependencies = ["pipecat-ai>=1.8.1,<1.9", "aiohttp>=3.10,<4", "soxr>=1.0,<2", "numpy>=1.26,<3"]
+
+[project.optional-dependencies]
+agent = ["pipecat-ai[webrtc,runner,openai]>=1.8.1,<1.9"]
+test = ["pytest>=8,<10", "pytest-asyncio>=1,<2"]
+
+[project.urls]
+Homepage = "https://oruk.ai"
+Documentation = "https://oruk.ai/docs"
+Repository = "https://github.com/Oruk-AI/pipecat-oruk"
+Issues = "https://github.com/Oruk-AI/pipecat-oruk/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pipecat_oruk"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
