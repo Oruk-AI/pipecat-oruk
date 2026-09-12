@@ -6,15 +6,17 @@ Stream speech to Oruk's realtime preview and receive interim transcripts, final 
 
 **Release candidate.** The adapter is tested with Pipecat 1.8.1 on Python 3.11, 3.12, 3.13, and 3.14. The package accepts Pipecat 1.8.x; other patch releases require their own recorded checks. Automated tests use a simulated gateway with the real framework. A separate [production browser demonstration](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md) verifies WebRTC, real transcription and phrase estimates, two consecutive turns, cancellation after an interim result, reconnection, and backend metering. This is not an accuracy benchmark or a verified LLM/TTS conversation.
 
-## Install from this checkout
+## Install
 
-Use a Python virtual environment. From this repository's root:
+Use a Python virtual environment and pin the release candidate explicitly:
 
 ```sh
-python -m pip install '.'
+python -m pip install 'pipecat-oruk==0.1.0rc1'
 ```
 
-Set `ORUK_API_KEY` in the server environment using a key from your Oruk developer portal. Keys are sent in an authenticated WebSocket upgrade, never in a URL or browser bundle. The distribution is named `pipecat-oruk` and uses `pipecat_oruk` imports. Registry installation is not available until publication.
+For the browser transport dependencies, install `pipecat-oruk[agent]==0.1.0rc1`. The examples below live in this repository; clone it to run them. To develop the adapter from a checkout, run `python -m pip install '.'` from the repository root.
+
+Set `ORUK_API_KEY` in the server environment using a key from your Oruk developer portal. Keys are sent in an authenticated WebSocket upgrade, never in a URL or browser bundle. The distribution is named `pipecat-oruk` and uses `pipecat_oruk` imports.
 
 ## Try an audio recording
 
@@ -122,4 +124,4 @@ python -m pytest -q
 python -m build
 ```
 
-The production browser check covers two consecutive turns, cancellation after an interim result, reconnection, and backend metering. Its 45-second recording and request receipts are in [the demonstration record](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md). A full spoken assistant using an LLM and TTS, including assistant barge-in, still needs separate verification. PyPI publication and an upstream documentation listing are pending.
+The production browser check covers two consecutive turns, cancellation after an interim result, reconnection, and backend metering. Its 45-second recording and request receipts are in [the demonstration record](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md). A full spoken assistant using an LLM and TTS, including assistant barge-in, still needs separate verification. This package is a release candidate; it is not an upstream Pipecat release. An upstream documentation listing is still pending.
