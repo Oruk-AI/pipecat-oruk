@@ -6,6 +6,8 @@ Stream speech to Oruk's realtime preview and receive interim transcripts, final 
 
 **Release candidate.** The adapter is tested with Pipecat 1.8.1 on Python 3.11, 3.12, 3.13, and 3.14. The package accepts Pipecat 1.8.x; other patch releases require their own recorded checks. Automated tests use a simulated gateway with the real framework. A separate [production browser demonstration](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md) verifies WebRTC, real transcription and phrase estimates, two consecutive turns, cancellation after an interim result, reconnection, and backend metering. This is not an accuracy benchmark or a verified LLM/TTS conversation.
 
+See the [Oruk service guide in Pipecat’s documentation](https://docs.pipecat.ai/api-reference/server/services/stt/oruk) for setup, configuration, and a pipeline example.
+
 ## Install
 
 Use a Python virtual environment and pin the release candidate explicitly:
@@ -124,4 +126,4 @@ python -m pytest -q
 python -m build
 ```
 
-The production browser check covers two consecutive turns, cancellation after an interim result, reconnection, and backend metering. Its 45-second recording and request receipts are in [the demonstration record](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md). A full spoken assistant using an LLM and TTS, including assistant barge-in, still needs separate verification. This package is a release candidate; it is not an upstream Pipecat release. An upstream documentation listing is still pending.
+The production browser check covers two consecutive turns, cancellation after an interim result, reconnection, and backend metering. Its 45-second recording and request receipts are in [the demonstration record](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md). A full spoken assistant using an LLM and TTS, including assistant barge-in, still needs separate verification. This package is a release candidate; it is not an upstream Pipecat release.
