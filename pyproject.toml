@@ -13,6 +13,7 @@ authors = [{name = "oruk labs", email = "access@oruk.ai"}]
 dependencies = ["pipecat-ai>=1.8.1,<1.9", "aiohttp>=3.10,<4", "soxr>=1.0,<2", "numpy>=1.26,<3"]
 
 [project.optional-dependencies]
+local = ["onnx-asr[cpu]==0.7.0", "huggingface-hub>=0.34,<2"]
 agent = ["pipecat-ai[webrtc,runner,openai]>=1.8.1,<1.9"]
 test = ["pytest>=8,<10", "pytest-asyncio>=1,<2"]
 
