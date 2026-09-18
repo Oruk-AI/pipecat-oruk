@@ -24,7 +24,8 @@ Set `ORUK_API_KEY` in the server environment using a key from your Oruk develope
 
 The optional `OrukeetSTTService` runs the [Orukeet](https://huggingface.co/oruk/orukeet)
 INT8 ONNX model on CPU. It needs no API key and keeps audio on the machine running
-Pipecat. Install the local extra from this checkout (it is not in `0.1.0rc1`):
+Pipecat. Install the local extra from this checkout, which prepares `0.1.0rc2` (the
+published `0.1.0rc1` does not include it):
 
 ```sh
 python -m pip install '.[local]'
@@ -171,3 +172,5 @@ python -m build
 ```
 
 The production browser check covers two consecutive turns, cancellation after an interim result, reconnection, and backend metering. Its 45-second recording and request receipts are in [the demonstration record](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md). A full spoken assistant using an LLM and TTS, including assistant barge-in, still needs separate verification. This package is a release candidate; it is not an upstream Pipecat release.
+Maintainers can follow [the release procedure](docs/RELEASING.md) to verify the
+artifacts before making a separate publishing decision.
