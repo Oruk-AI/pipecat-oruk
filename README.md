@@ -20,6 +20,51 @@ For the browser transport dependencies, install `pipecat-oruk[agent]==0.1.0rc1`.
 
 Set `ORUK_API_KEY` in the server environment using a key from your Oruk developer portal. Keys are sent in an authenticated WebSocket upgrade, never in a URL or browser bundle. The distribution is named `pipecat-oruk` and uses `pipecat_oruk` imports.
 
+## Local Orukeet transcription
+
+The optional `OrukeetSTTService` runs the [Orukeet](https://huggingface.co/oruk/orukeet)
+INT8 ONNX model on CPU. It needs no API key and keeps audio on the machine running
+Pipecat. Install the local extra from this checkout, which prepares `0.1.0rc2` (the
+published `0.1.0rc1` does not include it):
+
+```sh
+python -m pip install '.[local]'
+python examples/pipecat_local_file.py recording.wav
+```
+
+The file example accepts mono PCM16 WAVs at 16 kHz, up to one minute long, and
+prints final text from a real Silero VAD pipeline. For an application, set its
+input sample rate to 16 kHz and place the local service after `VADProcessor`:
+
+```python
+from pipecat_oruk.local import OrukeetSTTService
+
+stt = OrukeetSTTService()
+await stt.prewarm()  # In your async setup, before accepting audio.
+# Pipeline([transport.input(), vad, stt, ...])
+```
+
+Recognition starts when VAD ends an utterance. The model supports 25 languages
+with automatic detection, but emits only final text: no interim results,
+language code, word timestamps, speaker labels, or phrase-emotion estimates.
+Language forcing is rejected. One instance serializes native inference;
+canceling a task discards its result, while cleanup waits for CPU work to finish.
+The pipeline's normal cleanup releases the model.
+
+The first load fetches required files and notices from Hugging Face at revision
+`1751fce6ecde442f14543cf1804800c49b3e415c`, checking all four runtime files against
+pinned SHA-256 hashes. Its required `config.json` uses Hugging Face's normal model
+download accounting. Complete cached loads make no HTTP requests. Pass
+`cache_dir="..."` to choose a Hub cache and `local_files_only=True` to require
+cached files; the file example offers `--offline`. A corrupt cache fails with a
+message identifying the file to remove and download again.
+
+The model weights use **CC BY-SA 4.0** with NVIDIA foundation attribution. The
+weight license, notices, and converter/preprocessor licenses are downloaded
+alongside the model; this package's code remains MIT-licensed. The hosted
+`OrukSTTService` and its dependencies are unchanged unless the local extra is
+explicitly installed.
+
 ## Try an audio recording
 
 ```sh
@@ -121,9 +166,11 @@ Usage metrics come from the provider receipt, not idle microphone bytes. A recei
 The tests cover real streaming before commit, independent turns, VAD prefix and partial frames, five sample-rate conversions, failure/timeout/cancellation, bounded buffers, mute, immutable metadata, receipt-based metrics, language updates, and the actual user-aggregator handoff. The CLI is exercised as a subprocess against the local gateway. The test recording and its separate attribution are in `tests/audio/`. It is not covered by the program's MIT license.
 
 ```sh
-python -m pip install '.[agent,test]' 'build>=1,<2' 'ruff>=0.15,<1' 'pyright>=1.1,<2'
+python -m pip install '.[agent,test,local]' 'build>=1,<2' 'ruff>=0.15,<1' 'pyright>=1.1,<2'
 python -m pytest -q
 python -m build
 ```
 
 The production browser check covers two consecutive turns, cancellation after an interim result, reconnection, and backend metering. Its 45-second recording and request receipts are in [the demonstration record](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md). A full spoken assistant using an LLM and TTS, including assistant barge-in, still needs separate verification. This package is a release candidate; it is not an upstream Pipecat release.
+Maintainers can follow [the release procedure](docs/RELEASING.md) to verify the
+artifacts before making a separate publishing decision.

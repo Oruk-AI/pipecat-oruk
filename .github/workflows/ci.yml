@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install framework and build dependencies
-        run: python -m pip install ".[agent,test]" "build>=1,<2" "twine>=6,<8"
+        run: python -m pip install ".[agent,test,local]" "build>=1,<2" "twine>=6,<8"
       - name: Build distributions
         run: python -m build
       - name: Validate distribution metadata
