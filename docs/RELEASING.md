@@ -1,6 +1,6 @@
 # Release procedure
 
-The current checkout prepares `0.1.0rc2`. Building or merging it does not publish a package. The existing manual **Publish Pipecat integration** workflow is the only publishing path documented here.
+The commands below describe `0.1.0rc3`. For a later candidate, first choose an unused version and update these references. Building or merging does not publish a package. The existing manual **Publish Pipecat integration** workflow is the only publishing path documented here.
 
 1. Review the diff and changelog. Keep `pyproject.toml`, `pipecat_oruk.__version__`, and the version references in `.github/workflows/publish.yml` synchronized. The workflow also verifies the installed package's version.
 2. Require the package CI matrix to pass for the exact commit: Linux Python 3.11–3.14 and macOS/Windows Python 3.12. These tests exercise Pipecat 1.8.1 with a simulated hosted gateway and local-recognizer fixtures; they do not download model weights or replace real-model qualification.
@@ -11,7 +11,7 @@ The current checkout prepares `0.1.0rc2`. Building or merging it does not publis
    python -m build
    python -m twine check --strict dist/*
    python -m pip install --force-reinstall --no-deps dist/*.whl
-   python -c "import importlib.metadata, pipecat_oruk; from pipecat_oruk.local import OrukeetSTTService; assert pipecat_oruk.__version__ == importlib.metadata.version('pipecat-oruk') == '0.1.0rc2'"
+   python -c "import importlib.metadata, pipecat_oruk; from pipecat_oruk.local import OrukeetSTTService; assert pipecat_oruk.__version__ == importlib.metadata.version('pipecat-oruk') == '0.1.0rc3'"
    python -m pytest -q tests
    python -m pip check
    ```

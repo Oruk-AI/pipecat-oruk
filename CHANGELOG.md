@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.1.0rc2 — unreleased
+## 0.1.0rc3 — 2026-09-18
+
+Documentation-only follow-up: point both hosted and local installation commands to the released package instead of the older hosted-only candidate or a source checkout. Model files, runtime code, dependencies and behavior are unchanged from `0.1.0rc2`.
+
+## 0.1.0rc2 — 2026-09-18
 
 - Add optional CPU Orukeet transcription after Pipecat VAD through the `local` extra.
 - Verify pinned Hugging Face runtime files, retain weight notices, and support complete offline caches.
