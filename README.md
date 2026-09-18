@@ -13,10 +13,10 @@ See the [Oruk service guide in Pipecat’s documentation](https://docs.pipecat.a
 Use a Python virtual environment and pin the release candidate explicitly:
 
 ```sh
-python -m pip install 'pipecat-oruk==0.1.0rc1'
+python -m pip install 'pipecat-oruk==0.1.0rc3'
 ```
 
-For the browser transport dependencies, install `pipecat-oruk[agent]==0.1.0rc1`. The examples below live in this repository; clone it to run them. To develop the adapter from a checkout, run `python -m pip install '.'` from the repository root.
+For the browser transport dependencies, install `pipecat-oruk[agent]==0.1.0rc3`. The examples below live in this repository; clone it to run them. To develop the adapter from a checkout, run `python -m pip install '.'` from the repository root.
 
 Set `ORUK_API_KEY` in the server environment using a key from your Oruk developer portal. Keys are sent in an authenticated WebSocket upgrade, never in a URL or browser bundle. The distribution is named `pipecat-oruk` and uses `pipecat_oruk` imports.
 
@@ -24,11 +24,10 @@ Set `ORUK_API_KEY` in the server environment using a key from your Oruk develope
 
 The optional `OrukeetSTTService` runs the [Orukeet](https://huggingface.co/oruk/orukeet)
 INT8 ONNX model on CPU. It needs no API key and keeps audio on the machine running
-Pipecat. Install the local extra from this checkout, which prepares `0.1.0rc2` (the
-published `0.1.0rc1` does not include it):
+Pipecat. Install the local extra from the published `0.1.0rc3` release:
 
 ```sh
-python -m pip install '.[local]'
+python -m pip install 'pipecat-oruk[local]==0.1.0rc3'
 python examples/pipecat_local_file.py recording.wav
 ```
 

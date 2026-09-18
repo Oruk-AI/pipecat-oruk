@@ -10,7 +10,7 @@ from ._service import (
 )
 from .realtime import RealtimeOptions
 
-__version__ = "0.1.0rc2"
+__version__ = "0.1.0rc3"
 __all__ = [
     "OrukCommitFrame", "OrukEventFrame", "OrukPhraseEmotionFrame",
     "OrukSpeakerBoundaryFrame", "OrukSTTService", "OrukTurnCompletedFrame", "RealtimeOptions",
