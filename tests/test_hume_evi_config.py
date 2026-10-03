@@ -5,7 +5,7 @@ import pytest
 
 from examples.hume_evi.bot import settings
 from examples.hume_evi.config import Config, load_config
-from hume_helpers import loopback_only  # noqa: F401
+from hume_helpers import credential_free_subprocess_env, loopback_only  # noqa: F401
 
 pytestmark = pytest.mark.usefixtures("loopback_only")
 
@@ -75,6 +75,29 @@ async def test_pinned_provider_constructors_are_compatible_and_offline():
     assert primary and llm and tts
 
 
+def test_subprocess_environment_preserves_platform_essentials_only():
+    essentials = {
+        "Path": "synthetic-bin",
+        "SystemRoot": "synthetic-windows",
+        "WINDIR": "synthetic-windows",
+        "TEMP": "synthetic-temp",
+        "TMP": "synthetic-temp",
+    }
+    assert (
+        credential_free_subprocess_env(
+            {
+                **essentials,
+                "OPENAI_API_KEY": "synthetic-secret",
+                "DEEPGRAM_API_KEY": "synthetic-secret",
+                "ORUK_API_KEY": "synthetic-secret",
+                "STT_PROVIDER": "synthetic-provider",
+                "PYTHONPATH": "untrusted-import-path",
+            }
+        )
+        == essentials
+    )
+
+
 def test_help_cannot_open_network_or_require_credentials(tmp_path):
     import os
     import subprocess
@@ -87,7 +110,7 @@ def test_help_cannot_open_network_or_require_credentials(tmp_path):
         "socket.socket.connect = blocked\nsocket.socket.connect_ex = blocked\nsocket.getaddrinfo = blocked\n"
     )
     env = {
-        "PATH": os.environ["PATH"],
+        **credential_free_subprocess_env(os.environ),
         "PYTHONPATH": str(tmp_path),
         "PYTHONDONTWRITEBYTECODE": "1",
     }

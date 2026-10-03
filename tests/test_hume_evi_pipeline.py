@@ -1,7 +1,10 @@
 import asyncio
+import copy
 
 import pytest
 from pipecat.frames.frames import (
+    DataFrame,
+    LLMContextAssistantTurnFrame,
     LLMMessagesAppendFrame,
     VADUserStartedSpeakingFrame,
     VADUserStoppedSpeakingFrame,
@@ -31,13 +34,14 @@ def build(
     tool_args=None,
     playback_delay=0,
     tts_chunks=1,
+    tts_completion=None,
     exact=False,
 ):
     transport = SyntheticTransport(delay=playback_delay)
     stt, llm, tts = (
         SyntheticPrimarySTT(),
         SyntheticLLM(tool_args),
-        SyntheticTTS(tts_chunks),
+        SyntheticTTS(tts_chunks, tts_completion),
     )
     session = build_pipeline(
         transport,
@@ -198,7 +202,10 @@ async def test_real_tool_dispatch_settles_once_and_continues(args, expected):
 
 
 async def test_real_tool_timeout_settles_and_rejects_late_result():
-    session, transport, stt, llm, _ = build(tool_args={"order_id": "DEMO-100"})
+    completion = asyncio.Event()
+    session, transport, stt, llm, _ = build(
+        tool_args={"order_id": "DEMO-100"}, tts_completion=completion
+    )
     cancelled = asyncio.Event()
     callback = []
 
@@ -212,14 +219,25 @@ async def test_real_tool_timeout_settles_and_rejects_late_result():
     llm.register_function(
         "lookup_demo_order", slow, cancel_on_interruption=True, timeout_secs=0.03
     )
-    async with running([session.pipeline]) as (worker, _, _):
+    async with running([session.pipeline]) as (worker, down, _):
         await turn(worker, stt)
         await asyncio.wait_for(cancelled.wait(), 3)
         await eventually(lambda: len(llm.inputs) == 2 and transport.outgoing.written)
-        before = str(session.context.get_messages())
+        assert "Synthetic reply 2." not in str(session.context.get_messages())
+        completion.set()
+        await down.wait_for(
+            lambda frame: isinstance(frame, LLMContextAssistantTurnFrame)
+            and frame.text == "Synthetic reply 2."
+        )
+        before = copy.deepcopy(session.context.get_messages())
         await callback[0]({"late": "must_not_appear"})
-        await asyncio.sleep(0.03)
-        assert str(session.context.get_messages()) == before
+        # Drain frames queued by the callback through the assistant aggregator.
+        barrier = DataFrame()
+        await llm.push_frame(barrier)
+        await down.wait_for(lambda frame: frame.id == barrier.id)
+        assert session.context.get_messages() == before
+        assert "must_not_appear" not in str(session.context.get_messages())
+        assert len(llm.inputs) == 2
         tools = [m for m in session.context.get_messages() if m.get("role") == "tool"]
         assert len(tools) == 1 and "cancel" in tools[0]["content"].lower()
 
@@ -265,7 +283,10 @@ async def test_barge_in_flushes_real_playback_queue_and_next_turn_works():
 
 
 async def test_barge_in_cancels_tool_then_primary_conversation_continues():
-    session, transport, stt, llm, _ = build(tool_args={"order_id": "DEMO-100"})
+    completion = asyncio.Event()
+    session, transport, stt, llm, _ = build(
+        tool_args={"order_id": "DEMO-100"}, tts_completion=completion
+    )
     started, cancelled = asyncio.Event(), asyncio.Event()
     callback = []
 
@@ -280,16 +301,26 @@ async def test_barge_in_cancels_tool_then_primary_conversation_continues():
     llm.register_function(
         "lookup_demo_order", pending, cancel_on_interruption=True, timeout_secs=3
     )
-    async with running([session.pipeline]) as (worker, _, _):
+    async with running([session.pipeline]) as (worker, down, _):
         await turn(worker, stt)
         await asyncio.wait_for(started.wait(), 3)
         await turn(worker, stt, 2)
         await asyncio.wait_for(cancelled.wait(), 3)
         await eventually(lambda: len(llm.inputs) == 2 and transport.outgoing.written)
-        before = str(session.context.get_messages())
+        assert "Synthetic reply 2." not in str(session.context.get_messages())
+        completion.set()
+        await down.wait_for(
+            lambda frame: isinstance(frame, LLMContextAssistantTurnFrame)
+            and frame.text == "Synthetic reply 2."
+        )
+        before = copy.deepcopy(session.context.get_messages())
         await callback[0]({"late_interrupted_tool": True})
-        await asyncio.sleep(0.02)
-        assert str(session.context.get_messages()) == before
+        barrier = DataFrame()
+        await llm.push_frame(barrier)
+        await down.wait_for(lambda frame: frame.id == barrier.id)
+        assert session.context.get_messages() == before
+        assert "late_interrupted_tool" not in str(session.context.get_messages())
+        assert len(llm.inputs) == 2
         assert [m["content"] for m in llm.inputs[-1] if m.get("role") == "user"] == [
             "Primary words one.",
             "Primary words two.",

@@ -32,6 +32,12 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from examples.hume_evi.policy import SCOPE_METADATA
 
 
+def credential_free_subprocess_env(environ):
+    """Keep OS loader/temp essentials, never inherited provider credentials."""
+    essentials = {"path", "systemroot", "windir", "temp", "tmp"}
+    return {key: value for key, value in environ.items() if key.lower() in essentials}
+
+
 @pytest.fixture
 def loopback_only(monkeypatch):
     """Fail before DNS/connect for every non-loopback IPv4/IPv6 destination."""
@@ -161,10 +167,11 @@ class SyntheticLLM(LLMService):
 
 
 class SyntheticTTS(FrameProcessor):
-    def __init__(self, chunks=1):
+    def __init__(self, chunks=1, completion_gate=None):
         super().__init__()
         self.texts = []
         self.chunks = chunks
+        self.completion_gate = completion_gate
 
     async def process_frame(self, frame, direction):
         await super().process_frame(frame, direction)
@@ -185,6 +192,13 @@ class SyntheticTTS(FrameProcessor):
             if isinstance(frame, TTSSpeakFrame):
                 await self.push_frame(LLMAssistantPushAggregationFrame())
         else:
+            # Explicitly reproduce playback preceding the assistant context write.
+            if (
+                isinstance(frame, LLMFullResponseEndFrame)
+                and self.texts
+                and self.completion_gate is not None
+            ):
+                await self.completion_gate.wait()
             await self.push_frame(frame, direction)
 
 
