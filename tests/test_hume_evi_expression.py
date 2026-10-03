@@ -345,7 +345,7 @@ async def test_backpressure_drops_only_optional_signal(monkeypatch):
     store = SignalStore()
     tap = ExpressionAudioTap(
         store,
-        Config(signals_enabled=True, signal_buffer_seconds=0.1),
+        Config(signals_enabled=True, signal_buffer_seconds=0.5),
         api_key="fixture-key",
     )
     async with running([tap]) as (worker, down, _):
@@ -354,13 +354,13 @@ async def test_backpressure_drops_only_optional_signal(monkeypatch):
         await down.wait_for(lambda f: f is prefix)
         await worker.queue_frame(VADUserStartedSpeakingFrame(start_secs=0.2))
         await waiting.wait()
-        frames = chunks(b"\x01\x02" * 6400)
+        frames = chunks(b"\x01\x02" * 12800)
         await worker.queue_frames(frames)
         await down.wait_for(lambda f: f is frames[-1])
-        assert tap.peak_queued_bytes <= 3200
+        assert tap.peak_queued_bytes <= 16000
         assert (
             b"".join(f.audio for f in down.frames if isinstance(f, InputAudioRawFrame))
-            == prefix.audio + b"\x01\x02" * 6400
+            == prefix.audio + b"\x01\x02" * 12800
         )
         assert any(t["status"] == "signal_skipped_backpressure" for t in store.trace)
         assert all(
@@ -457,6 +457,8 @@ async def test_sidecar_exception_does_not_log_credentials_audio_or_transcript(
             await worker.queue_frame(VADUserStartedSpeakingFrame(start_secs=0.2))
             await eventually(lambda: store.trace)
             assert store.trace[-1]["status"] == "signal_failed_outcome_unknown"
+            assert store.trace[-1]["server_request_id"] is None
+            assert store.trace[-1]["billing_outcome"] == "unreconciled"
     finally:
         logger.remove(sink)
     assert "private-key-canary" not in str(logs) + str(store.trace)
@@ -543,3 +545,128 @@ async def test_signal_storage_and_context_size_stay_bounded():
         await down.wait_for(lambda f: f is request)
         assert not signal_notes(context)
         assert context.get_messages() == [{"role": "user", "content": "same"}]
+
+
+@pytest.mark.parametrize("mode", ["normal", "error_after_usage"])
+async def test_owned_server_request_id_preserves_scope_and_receipt(gateway, mode):
+    store = SignalStore()
+    async with gateway(mode=mode, server_request_id="server-owned-request") as server:
+        tap = ExpressionAudioTap(
+            store,
+            Config(signals_enabled=True),
+            api_key="fixture-key",
+            endpoint=server.endpoint,
+        )
+        bridge = PrimaryScopeBridge(store, lambda f: [f.metadata[SCOPE_METADATA]])
+        gate = SignalContextGate(store, "exact_scope")
+        async with running([tap, bridge, gate]) as (worker, down, _):
+            prefix = audio(b"\0\1" * 1600)
+            await worker.queue_frame(prefix)
+            await down.wait_for(lambda f: f is prefix)
+            await worker.queue_frame(VADUserStartedSpeakingFrame(start_secs=0.2))
+            stop = VADUserStoppedSpeakingFrame(stop_secs=0.2)
+            await worker.queue_frame(stop)
+            await down.wait_for(lambda f: f is stop)
+            scope = stop.metadata[SCOPE_METADATA]
+            record = store.records[scope.utterance_id]
+            await eventually(lambda: record.status != "streaming")
+            assert record.usage == {"audio_seconds": 0.1, "billable_seconds": 1}
+            assert record.phrases["phrase_1"]["scores"] == [
+                {"label": "happy", "score": 0.7}
+            ]
+            assert record.server_request_id == "server-owned-request"
+            assert scope.utterance_id == record.utterance_id != record.server_request_id
+            assert server.client_request_ids == [scope.utterance_id]
+            assert bytes(server.audio[0]) == prefix.audio
+            assert [f for f in down.frames if isinstance(f, InputAudioRawFrame)] == [
+                prefix
+            ]
+            trace = store.trace[-1]
+            assert trace["request_id"] == scope.utterance_id
+            assert trace["server_request_id"] == "server-owned-request"
+            assert trace["usage"] == record.usage
+            assert trace["billing_outcome"] == "unreconciled"
+            assert record.status == (
+                "completed" if mode == "normal" else "signal_failed_outcome_unknown"
+            )
+            final = TranscriptionFrame(
+                "Primary words unchanged.", "alice", "t", finalized=True
+            )
+            final.metadata[SCOPE_METADATA] = scope
+            await worker.queue_frame(final)
+            await down.wait_for(lambda f: f is final)
+            context = LLMContext([{"role": "user", "content": final.text}])
+            inference = LLMContextFrame(context)
+            await worker.queue_frame(inference)
+            await down.wait_for(lambda f: f is inference)
+            assert context.get_messages()[0]["content"] == "Primary words unchanged."
+            assert bool(signal_notes(context)) is (mode == "normal")
+
+
+async def test_minimum_buffer_accepts_entire_retained_prefix(gateway):
+    store = SignalStore()
+    async with gateway() as server:
+        tap = ExpressionAudioTap(
+            store,
+            Config(signals_enabled=True, signal_buffer_seconds=0.5),
+            api_key="fixture-key",
+            endpoint=server.endpoint,
+        )
+        async with running([tap]) as (worker, down, _):
+            frames = chunks(b"\0\1" * 16000)
+            await worker.queue_frames(frames)
+            await down.wait_for(lambda f: f is frames[-1])
+            await worker.queue_frame(VADUserStartedSpeakingFrame(start_secs=0.2))
+            await worker.queue_frame(VADUserStoppedSpeakingFrame(stop_secs=0.2))
+            await eventually(
+                lambda: any(r.status == "completed" for r in store.records.values())
+            )
+            assert bytes(server.audio[0]) == b"\0\1" * 8000
+            assert tap.peak_queued_bytes == 16000
+            assert server.requests == 1
+            assert not any(
+                t["status"] == "signal_skipped_backpressure" for t in store.trace
+            )
+
+
+def test_owned_transport_binding_rejects_rebinding_and_untrusted_events():
+    store = SignalStore()
+    record = store.begin("alice", 0)
+    scope = store.seal(record, 1600)
+    foreign = event(record, request_id="server-owned-request")
+    store.observe(record, foreign)
+    assert not record.phrases and record.server_request_id is None
+    for invalid in [None, "", "x" * 129, "unsafe/id", []]:
+        store.observe_owned_turn(record, event(record, request_id=invalid))
+    assert not record.phrases and record.server_request_id is None
+    store.observe_owned_turn(record, foreign)
+    assert record.server_request_id == "server-owned-request"
+    assert record.scope is scope and scope.utterance_id == record.utterance_id
+    for observer in [store.observe, store.observe_owned_turn]:
+        observer(
+            record, event(record, request_id="different-server", phrase_id="rebind")
+        )
+        observer(record, event(record, phrase_id="client-id-after-bind"))
+    assert record.server_request_id == "server-owned-request"
+    assert list(record.phrases) == ["synthetic-phrase"]
+    # An unrelated owned record cannot consume this mapping through observe().
+    other = store.begin("bob", 1600)
+    store.observe(other, foreign)
+    assert other.server_request_id is None and not other.phrases
+
+
+@pytest.mark.parametrize("state", ["closed", "evicted", "old_generation", "cancelled"])
+def test_owned_transport_binding_cannot_revive_stale_record(state):
+    store = SignalStore()
+    record = store.begin("alice", 0)
+    if state == "closed":
+        store.close()
+    elif state == "evicted":
+        for i in range(8):
+            store.begin("alice", 1600 * (i + 1))
+    elif state == "old_generation":
+        store.generation = "next-generation"
+    else:
+        store.status(record, "cancelled_outcome_unknown")
+    store.observe_owned_turn(record, event(record, request_id="late-server-request"))
+    assert record.server_request_id is None and not record.phrases

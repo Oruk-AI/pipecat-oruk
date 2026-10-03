@@ -50,6 +50,7 @@ class Record:
     utterance_id: str
     start_sample: int
     scope: AudioScope | None = None
+    server_request_id: str | None = None
     status: str = "streaming"
     phrases: OrderedDict = field(default_factory=OrderedDict)
     usage: dict = field(default_factory=dict)
@@ -76,6 +77,7 @@ class SignalStore:
             {
                 "generation": record.generation,
                 "request_id": record.utterance_id,
+                "server_request_id": record.server_request_id,
                 "status": code,
                 # A local cancellation/rejection name, or even a usage receipt,
                 # cannot establish final account settlement. Keep this separate
@@ -95,14 +97,39 @@ class SignalStore:
         )
         return record.scope
 
-    def observe(self, record: Record, event: dict):
-        if (
-            self.closed
-            or record.generation != self.generation
-            or self.records.get(record.utterance_id) is not record
+    def _owns(self, record: Record) -> bool:
+        return (
+            not self.closed
+            and record.generation == self.generation
+            and self.records.get(record.utterance_id) is record
+        )
+
+    def observe_owned_turn(self, record: Record, event: dict):
+        """Only for the callback owned by this record's run_turn invocation.
+
+        The adapter adopts session.created's server ID before invoking callbacks.
+        Bind that transport identity once; it never replaces local audio identity.
+        An arbitrary event passed to observe() cannot establish this mapping.
+        """
+        if not self._owns(record) or record.status != "streaming":
+            return
+        server_id = event.get("request_id")
+        if not isinstance(server_id, str) or not re.fullmatch(
+            r"[\w.-]{1,128}", server_id
         ):
             return
-        if event.get("request_id") != record.utterance_id:
+        if (
+            record.server_request_id is not None
+            and record.server_request_id != server_id
+        ):
+            return
+        record.server_request_id = server_id
+        self.observe(record, event)
+
+    def observe(self, record: Record, event: dict):
+        if not self._owns(record):
+            return
+        if event.get("request_id") != (record.server_request_id or record.utterance_id):
             return
         kind = event.get("type", "")
         if kind == "session.usage":

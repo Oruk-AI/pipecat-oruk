@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
+VAD_PREFIX_SECONDS = 0.5
+
 
 @dataclass(frozen=True)
 class Config:
@@ -31,7 +33,7 @@ class Config:
             raise ValueError("Invalid signal policy")
         for name, low, high in [
             ("signal_timeout", 0.05, 20),
-            ("signal_buffer_seconds", 0.1, 30),
+            ("signal_buffer_seconds", VAD_PREFIX_SECONDS, 30),
             ("max_turn_seconds", 0.1, 60),
         ]:
             value = getattr(self, name)

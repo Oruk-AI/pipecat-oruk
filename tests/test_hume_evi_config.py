@@ -26,6 +26,8 @@ def test_network_guard():
         "[]",
         "{",
         '{"schema_version":1,"signal_timeout":NaN}',
+        '{"schema_version":1,"signal_buffer_seconds":0.1}',
+        '{"schema_version":1,"signal_buffer_seconds":0.499}',
         '{"schema_version":1,"signal_policy":[]}',
         '{"schema_version":1,"signals_enabled":1}',
         '{"schema_version":1,"max_turn_seconds":61}',

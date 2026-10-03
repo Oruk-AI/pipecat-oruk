@@ -21,7 +21,7 @@ from pipecat_oruk.realtime import (
     validate_endpoint,
 )
 
-from .config import Config
+from .config import Config, VAD_PREFIX_SECONDS
 from .policy import Record, SCOPE_METADATA, SignalStore
 
 
@@ -115,7 +115,7 @@ class ExpressionAudioTap(FrameProcessor):
                         finish_timeout=self.config.signal_timeout,
                         max_turn_seconds=self.config.max_turn_seconds,
                     ),
-                    on_event=lambda event: self.store.observe(record, event),
+                    on_event=lambda event: self.store.observe_owned_turn(record, event),
                     connect_timeout=min(2, self.config.signal_timeout),
                     max_connect_retries=0,
                 )
@@ -216,7 +216,7 @@ class ExpressionAudioTap(FrameProcessor):
                 elif not self._speech:
                     self._prefix.extend(frame.audio)
                     del self._prefix[
-                        :-16_000
+                        : -int(VAD_PREFIX_SECONDS * 32_000)
                     ]  # Half a second, including VAD confirmation.
         elif (
             not self._closed
@@ -230,7 +230,8 @@ class ExpressionAudioTap(FrameProcessor):
                 if (
                     math.isfinite(frame.start_secs)
                     and 0 <= frame.start_secs
-                    and frame.start_secs + self._last_chunk_seconds <= 0.5
+                    and frame.start_secs + self._last_chunk_seconds
+                    <= VAD_PREFIX_SECONDS
                 ):
                     self._start_turn()
                 else:

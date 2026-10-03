@@ -16,6 +16,8 @@ from pipecat_oruk.realtime import EMOTION, TRANSCRIPT
 class Gateway:
     mode: str = "normal"
     fail_upgrades: list[int] = field(default_factory=list)
+    server_request_id: str | None = None
+    client_request_ids: list[str] = field(default_factory=list)
     requests: int = 0
     audio: list[bytearray] = field(default_factory=list)
     configs: list[dict[str, Any]] = field(default_factory=list)
@@ -40,13 +42,17 @@ class Gateway:
         index = len(self.audio)
         pcm = bytearray()
         self.audio.append(pcm)
-        request_id = request.headers.get("X-Request-ID", "req_local")
+        client_id = request.headers.get("X-Request-ID", "req_local")
+        self.client_request_ids.append(client_id)
+        request_id = self.server_request_id or client_id
 
         async def send(event: dict[str, Any]) -> None:
             await socket.send_json({"request_id": request_id, **event})
 
         try:
-            await send({"type": "session.created", "session": {"model": "oruk-realtime"}})
+            await send(
+                {"type": "session.created", "session": {"model": "oruk-realtime"}}
+            )
             async for message in socket:
                 if message.type == WSMsgType.BINARY:
                     assert len(message.data) <= 10_240 and len(message.data) % 2 == 0
@@ -59,14 +65,18 @@ class Gateway:
                     if self.mode == "invalid_json":
                         await socket.send_str("not-json")
                     elif first:
-                        await send({"type": TRANSCRIPT + "delta", "delta": "Provisional "})
+                        await send(
+                            {"type": TRANSCRIPT + "delta", "delta": "Provisional "}
+                        )
                         await send({"type": TRANSCRIPT + "delta", "delta": "words"})
                 elif message.type == WSMsgType.TEXT:
                     event = json.loads(message.data)
                     if event["type"] == "session.update":
                         assert not pcm
                         self.configs.append(event["session"])
-                        await send({"type": "session.updated", "session": event["session"]})
+                        await send(
+                            {"type": "session.updated", "session": event["session"]}
+                        )
                     elif event["type"] == "input_audio_buffer.commit":
                         if self.mode == "hang":
                             continue
@@ -91,7 +101,9 @@ class Gateway:
                             "top_emotion": {"label": "happy", "score": 0.7},
                         }
                         if self.mode == "bad_score":
-                            phrase["emotions"] = [{"label": "happy", "score": float("nan")}]
+                            phrase["emotions"] = [
+                                {"label": "happy", "score": float("nan")}
+                            ]
                         if self.mode == "phrase_failure":
                             phrase = {
                                 **phrase,
