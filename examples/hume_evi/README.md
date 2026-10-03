@@ -6,7 +6,9 @@ This is source code for building a replacement conversation stack, not an EVI pr
 
 ## Offline setup and tests
 
-Run these commands from this repository's root. The checked-in hash lock was installed and tested with Python **3.12.13 on macOS 26.4.1 ARM64**. Its resolution targets macOS 14 or newer; other OS versions still need validation. It includes framework/provider dependencies and test tools. It does not install the optional Orukeet local-model extra or download its weights.
+Run these commands from this repository's root. The checked-in hash lock was installed and tested with Python **3.12.13 on macOS 26.4.1 ARM64**. Its resolution targets macOS 14 or newer and is not a portable lock for other platforms. It includes framework/provider dependencies and test tools. It does not install the optional Orukeet local-model extra or download its weights.
+
+[Hosted CI at `95d8fbe`](https://github.com/Oruk-AI/pipecat-oruk/actions/runs/37142021518) also passed 162 repository tests in each of six separately resolved environments: Ubuntu with Python 3.11–3.14, macOS with Python 3.12, and Windows with Python 3.12. The Hume starter accounts for 78 tests using named synthetic providers. Those runs validate the tested package environments; they do not establish macOS-lock portability, live provider behavior or a production deployment.
 
 ```sh
 uv venv --python 3.12 .venv
