@@ -293,10 +293,18 @@ class SignalContextGate(FrameProcessor):
                         {"request_id": scope.utterance_id, **phrase}
                         for phrase in record.phrases.values()
                     )
-                # Never reuse a completed scope for another user inference.
-                self._last_scope_end = max(
-                    [self._last_scope_end, *(scope.end_sample for scope in scopes)]
+                # Consume attested scopes even when their signal is not ready,
+                # so a late result cannot attach to another user inference.
+                # Rejected identities must never advance this generation's clock.
+                owned_ends = (
+                    scope.end_sample
+                    for scope in scopes
+                    if scope.generation == self.store.generation
+                    and (owned := self.store.records.get(scope.utterance_id))
+                    is not None
+                    and owned.scope == scope
                 )
+                self._last_scope_end = max([self._last_scope_end, *owned_ends])
             if notes:
                 encoded = json.dumps(notes[:8], separators=(",", ":"))
                 if len(encoded) <= 4096:

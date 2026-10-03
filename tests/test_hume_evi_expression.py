@@ -169,6 +169,78 @@ async def test_late_signals_cannot_trigger_or_reuse_context_and_old_generation_i
         assert SignalStore().generation != store.generation
 
 
+@pytest.mark.parametrize("identity", ["generation", "unknown_id", "interval", "track"])
+@pytest.mark.parametrize("order", ["invalid_only", "valid_first", "invalid_first"])
+async def test_rejected_identity_cannot_poison_next_scope(identity, order):
+    store = SignalStore()
+    _, first = ready(store)
+    _, fresh = ready(store, start=1600, end=3200)
+    changes = {"end_sample": 16_000_000}
+    if identity == "generation":
+        changes["generation"] = "previous-generation"
+    elif identity == "unknown_id":
+        changes["utterance_id"] = "not-owned"
+    elif identity == "track":
+        changes["track"] = "other-track"
+    invalid = replace(first, **changes)
+    resolved = (
+        [invalid]
+        if order == "invalid_only"
+        else [first, invalid]
+        if order == "valid_first"
+        else [invalid, first]
+    )
+    bridge = PrimaryScopeBridge(store, lambda _: resolved)
+    gate = SignalContextGate(store, "exact_scope")
+
+    async with running([bridge, gate]) as (worker, down, _):
+
+        async def inference(scopes, text):
+            nonlocal resolved
+            resolved = scopes
+            final = TranscriptionFrame(text, "alice", "arbitrary", finalized=True)
+            await worker.queue_frame(final)
+            await down.wait_for(lambda frame: frame is final)
+            context = LLMContext([{"role": "user", "content": text}])
+            frame = LLMContextFrame(context)
+            await worker.queue_frame(frame)
+            await down.wait_for(lambda candidate: candidate is frame)
+            assert context.get_messages()[0]["content"] == text
+            return signal_notes(context)
+
+        assert not await inference(resolved, "Rejected identity.")
+        assert gate._last_scope_end == (-1 if order == "invalid_only" else 1600)
+        if order != "invalid_only":
+            # A valid scope in a rejected mixed group was still consumed.
+            assert not await inference([first], "Do not reuse the earlier scope.")
+        assert await inference([fresh], "Fresh primary words.")
+        assert gate._last_scope_end == 3200
+
+
+async def test_owned_not_ready_scope_is_consumed_without_blocking_fresh_turn():
+    store = SignalStore()
+    record, first = ready(store)
+    record.status = "streaming"
+    _, fresh = ready(store, start=1600, end=3200)
+    resolved = [first]
+    bridge = PrimaryScopeBridge(store, lambda _: resolved)
+    gate = SignalContextGate(store, "exact_scope")
+    async with running([bridge, gate]) as (worker, down, _):
+        for scopes, admitted in [([first], False), ([first], False), ([fresh], True)]:
+            resolved = scopes
+            final = TranscriptionFrame("Primary words.", "alice", "t", finalized=True)
+            await worker.queue_frame(final)
+            await down.wait_for(lambda frame: frame is final)
+            context = LLMContext([{"role": "user", "content": "Primary words."}])
+            frame = LLMContextFrame(context)
+            await worker.queue_frame(frame)
+            await down.wait_for(lambda candidate: candidate is frame)
+            assert bool(signal_notes(context)) is admitted
+            if record.status == "streaming":
+                assert gate._last_scope_end == 1600
+                store.status(record, "completed")
+
+
 @pytest.mark.parametrize(
     "changes",
     [
