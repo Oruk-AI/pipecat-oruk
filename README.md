@@ -8,6 +8,8 @@ Stream speech to Oruk's realtime preview and receive interim transcripts, final 
 
 See the [Oruk service guide in Pipecat’s documentation](https://docs.pipecat.ai/api-reference/server/services/stt/oruk) for setup, configuration, and a pipeline example.
 
+For a voice-agent migration that preserves your existing STT, see the [Hume EVI starter](examples/hume_evi/README.md). It includes injectable STT/LLM/TTS services, a synthetic tool, lifecycle tests and an optional bounded Oruk expression sidecar. The CLI keeps signals trace-only until exact primary-provider audio correlation is verified; external-provider/browser end-to-end validation remains pending.
+
 ## Install
 
 Use a Python virtual environment and pin the release candidate explicitly:
