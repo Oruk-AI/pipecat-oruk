@@ -6,7 +6,7 @@ This is source code for building a replacement conversation stack, not an EVI pr
 
 ## Offline setup and tests
 
-Run these commands from this repository's root. The checked-in hash lock was installed and tested with Python **3.12.13 on macOS ARM64, macOS 14 or newer**. It includes framework/provider dependencies and test tools. It does not install the optional Orukeet local-model extra or download its weights.
+Run these commands from this repository's root. The checked-in hash lock was installed and tested with Python **3.12.13 on macOS 26.4.1 ARM64**. Its resolution targets macOS 14 or newer; other OS versions still need validation. It includes framework/provider dependencies and test tools. It does not install the optional Orukeet local-model extra or download its weights.
 
 ```sh
 uv venv --python 3.12 .venv
@@ -80,7 +80,7 @@ Eligible notes contain bounded dynamic labels and finite scores; provider phrase
 
 The sidecar uses the published adapter's authenticated `wss://api.oruk.ai/v1/realtime?model=oruk-realtime` transport. It has one in-flight request, a bounded audio queue, a 60-second default audio limit, a two-second default finish deadline and a wall-clock deadline. An overlapping turn is skipped for signals while the primary conversation continues. Queue overflow, unsupported audio, transport errors and timeout cancel only the auxiliary request. There are **no automatic connection retries and no audio replay**.
 
-Cancellation, a missing usage receipt, or an error after audio was sent does not prove zero billing. The status `*_outcome_unknown` preserves this uncertainty. A receipt received before a failure remains a receipt, not proof of successful inference. Check provider billing records before manually replaying any uncertain request.
+Cancellation, a missing usage receipt, or an error after audio was sent does not prove zero billing. Every owned-request trace carries `billing_outcome: "unreconciled"`, including backpressure, format rejection and successful local completion. Status names describe local inference handling, not final settlement. A receipt received before a failure remains a receipt, not proof of successful inference. Check provider billing records before manually replaying any uncertain request.
 
 The CLI disables framework debug sinks before each live session because those logs can contain transcripts and tool arguments. At normal session shutdown it prints a bounded JSON summary of generation/request IDs, status codes and available Oruk usage receipts. It does not print keys, audio, transcript text or phrase text. In-memory context/audio is sensitive; add your own redacted telemetry and retention controls before deployment. SDK/platform logging still deserves review in your deployment environment.
 

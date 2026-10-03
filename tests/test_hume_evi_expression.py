@@ -291,7 +291,46 @@ async def test_backpressure_drops_only_optional_signal(monkeypatch):
             == prefix.audio + b"\x01\x02" * 6400
         )
         assert any(t["status"] == "signal_skipped_backpressure" for t in store.trace)
+        assert all(
+            t["billing_outcome"] == "unreconciled"
+            for t in store.trace
+            if "request_id" in t
+        )
     assert tap.active_task.done()
+
+
+@pytest.mark.parametrize("cause", ["format", "mute", "duration"])
+async def test_local_cancellation_after_audio_dispatch_never_implies_zero_billing(
+    gateway, cause
+):
+    async with gateway(mode="hang") as server:
+        store = SignalStore()
+        tap = ExpressionAudioTap(
+            store,
+            Config(signals_enabled=True, max_turn_seconds=0.1),
+            api_key="fixture-key",
+            endpoint=server.endpoint,
+        )
+        async with running([tap]) as (worker, down, _):
+            prefix = audio(b"\0\1" * 320)
+            await worker.queue_frame(prefix)
+            await down.wait_for(lambda f: f is prefix)
+            await worker.queue_frame(VADUserStartedSpeakingFrame(start_secs=0.2))
+            await server.first_audio.wait()
+            rejected = (
+                audio(b"\0\2" * 320, rate=48000)
+                if cause == "format"
+                else STTMuteFrame(mute=True)
+                if cause == "mute"
+                else audio(b"\0\3" * 1600)
+            )
+            await worker.queue_frame(rejected)
+            await down.wait_for(lambda f: f is rejected)
+            await eventually(lambda: tap.active_task.done())
+            owned = [t for t in store.trace if "request_id" in t]
+            assert owned and all(t["billing_outcome"] == "unreconciled" for t in owned)
+            assert server.requests == 1
+            assert bytes(server.audio[0]) == prefix.audio
 
 
 async def test_mute_and_unsupported_vad_never_send(gateway):

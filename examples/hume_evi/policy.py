@@ -77,6 +77,10 @@ class SignalStore:
                 "generation": record.generation,
                 "request_id": record.utterance_id,
                 "status": code,
+                # A local cancellation/rejection name, or even a usage receipt,
+                # cannot establish final account settlement. Keep this separate
+                # from inference status for every owned auxiliary request.
+                "billing_outcome": "unreconciled",
                 "usage": dict(record.usage),
             }
         )
