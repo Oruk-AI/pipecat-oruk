@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "system_prompt": "You are an AI voice assistant for a synthetic order demo. Keep answers brief. Only lookup_demo_order is available. Do not claim access to real customer records.",
+  "greeting": "Hello. I can help with our sample order DEMO-100.",
+  "signals_enabled": false,
+  "signal_policy": "trace_only",
+  "signal_timeout": 2,
+  "signal_buffer_seconds": 2,
+  "max_turn_seconds": 60
+}
