@@ -82,6 +82,10 @@ def build_pipeline(
     scope_resolver: ScopeResolver | None = None,
     api_key: str = "",
     endpoint: str | None = None,
+    tool_handler=None,
+    after_stt: FrameProcessor | None = None,
+    before_llm: FrameProcessor | None = None,
+    after_llm: FrameProcessor | None = None,
 ) -> Conversation:
     """Each call owns a new session. Never reuse these services after disconnect.
 
@@ -115,7 +119,7 @@ def build_pipeline(
     )
     llm.register_function(
         "lookup_demo_order",
-        lookup_demo_order,
+        lookup_demo_order if tool_handler is None else tool_handler,
         cancel_on_interruption=True,
         timeout_secs=3.0,
     )
@@ -134,19 +138,22 @@ def build_pipeline(
     )
     gate = SignalContextGate(store, config.signal_policy)
     pipeline = Pipeline(
-        [
+        [processor for processor in [
             transport.input(),
             vad,
             tap,
             stt,
             PrimaryScopeBridge(store, scope_resolver),
+            after_stt,
             user,
             gate,
+            before_llm,
             llm,
+            after_llm,
             SignalNoteExpiry(gate),
             tts,
             transport.output(),
             LLMAssistantAggregator(context),
-        ]
+        ] if processor is not None]
     )
     return Conversation(pipeline, context, store, tap, stt, config)
