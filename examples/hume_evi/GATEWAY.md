@@ -96,6 +96,48 @@ cannot be recalled; their original IDs are never relabeled. A reconnect is a
 new chat/group/generation with no replay or resume. SDK callers must explicitly
 set `reconnectAttempts: 0`; the gateway does not control client retry policy.
 
+## Real provider adapters
+
+`providers.py` implements the contract above for ordinary Pipecat services,
+so a deployment does not have to hand-write provenance handling:
+
+| Gateway role | Adapter | Provider seam |
+| --- | --- | --- |
+| VAD | `ScopedVAD(analyzer)` | Any Pipecat `VADAnalyzer` (for example Silero). A span starts at the chunk holding the first byte of the earliest frame that could have left QUIET. Because of the analyzer's carried partial frame, that may be one chunk early, but never inside the previous utterance. It ends where the analyzer returns to QUIET, trailing silence included. Speech longer than `max_seconds` fails closed instead of being split. |
+| STT | `ScopedUtteranceSTT(transcribe)` | `transcribe(pcm16, sample_rate) -> str` on exactly the span's bytes. `oruk_realtime_transcriber` sends each utterance as one Oruk realtime turn with no connection retry. `openai_transcriber` targets an OpenAI-compatible endpoint. |
+| LLM | `class MyLLM(TurnTaggedLLMMixin, OpenAILLMService)` | Any `LLMService` that streams within `process_frame`. One tool call per response is given the issued tool ID before Pipecat records it. Parallel calls fail closed. |
+| TTS | `ScopedSynthesisTTS(synthesize)` | `synthesize(text)` yields `(pcm16, rate)`. Output is resampled to 48 kHz, split into chunks of at most 100 ms, and tagged. A response end is held until its audio is out. `openai_speech_synthesizer` streams 24 kHz PCM from an OpenAI-compatible endpoint. |
+
+The provider factory still owns every client and closes it in `close`.
+Configure SDK retries explicitly: the OpenAI SDK retries some failures by
+default, and Pipecat's OpenAI LLM client does too. Keep the STT `max_seconds`
+at or above the VAD `max_seconds`. TTS resampling uses one flushed SoX stream
+per sentence, so there are no seams at provider chunk edges.
+
+Three limits apply to the LLM mixin:
+- An interruption or a new user turn cancels an unfinished transcription.
+- Pipecat drops an unparseable tool call before dispatch, so one malformed call next to one valid call is invisible to the mixin. A lone malformed call fails closed.
+- Pipecat's optional `filter_incomplete_user_turns` mode pushes text outside the turn scope and is not supported.
+
+Adapter failures push an `ErrorFrame`, and the gateway reports
+`provider_error`:
+- The STT adapter pushes its errors downstream. The TTS adapter pushes them upstream to `ProviderBridge`.
+- Ordinary Pipecat services report errors upstream with `push_error`. `WireInput` now observes those too, so a failed LLM completion no longer leaves a turn silently open until the session deadline.
+- Pipecat's websocket services also report each failed reconnect attempt as an `ErrorFrame`, even when a later attempt succeeds. Any such service ends the session on a brief network blip, as TTS errors already did through `ProviderBridge`.
+
+`tests/test_hume_evi_providers.py` checks all of this over loopback. It drives
+the pinned Pipecat `OpenAILLMService` and the OpenAI SDK against a local
+OpenAI-compatible fixture, and it covers:
+- exact transcription spans and bounded 48 kHz output;
+- tool-ID reissue;
+- parallel-call refusal;
+- STT, LLM and TTS failure;
+- a typed turn.
+
+This is contract evidence only. It does not qualify any real provider's
+accuracy, latency, cost, retention, voice rights or interruption feel. Those
+still need the customer's selected providers and permitted audio.
+
 ## Bounds and failure behavior
 
 Default local bounds are two concurrent sessions, 2,000 input messages, eight

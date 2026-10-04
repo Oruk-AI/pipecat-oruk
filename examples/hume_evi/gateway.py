@@ -473,6 +473,11 @@ class WireInput(FrameProcessor):
 
     async def process_frame(self, frame, direction):
         await super().process_frame(frame, direction)
+        if direction == FrameDirection.UPSTREAM and isinstance(frame, ErrorFrame):
+            # Pipecat services report failures upstream (push_error). This is the
+            # last owned processor before the source, so an LLM or STT failure
+            # cannot leave a turn silently open until the session deadline.
+            self.session.abort("provider_error")
         if direction == FrameDirection.DOWNSTREAM and isinstance(frame, InputAudioRawFrame):
             self.session.pending_input -= 1
             try:
