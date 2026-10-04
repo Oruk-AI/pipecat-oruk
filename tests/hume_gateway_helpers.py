@@ -1,8 +1,11 @@
 """Named synthetic providers and a task-owned loopback listener, never a model."""
 import asyncio
 import copy
+import socket
+import traceback
 from contextlib import asynccontextmanager
 
+import pytest_asyncio
 from aiohttp import ClientSession, ClientTimeout, web
 from pipecat.frames.frames import (
     FunctionCallFromLLM, InputAudioRawFrame, LLMContextFrame,
@@ -19,6 +22,52 @@ from hume_helpers import SyntheticLLM
 KEY = "local-synthetic-gateway-key-not-a-provider-key"
 SETTINGS = {"type": "session_settings", "audio": {"encoding": "linear16", "sample_rate": 16000, "channels": 1}}
 ALLOWED_PORTS = set()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def exact_loopback_only(monkeypatch):
+    """Guard the test body after asyncio constructs its platform self-pipe.
+
+    NamedTTS emits complete synthetic sentences, so this fixture disables only
+    Pipecat 1.8.1's optional NLTK cache warm-up. Tokenization is not qualified.
+    No external destination or arbitrary loopback port is granted an exception.
+    """
+    from pipecat.pipeline import worker
+
+    violations = []
+    original_connect, original_ex, original_dns = socket.socket.connect, socket.socket.connect_ex, socket.getaddrinfo
+
+    def check(host, port, *, lookup=False):
+        if host != "127.0.0.1" or not (port in ALLOWED_PORTS or (lookup and port == 0)):
+            # Preserve call sites without copying URLs, keys or stack locals.
+            violations.append([(entry.name, entry.lineno) for entry in traceback.extract_stack(limit=12)])
+            raise AssertionError("external_or_unowned_network_prohibited")
+
+    def connect(sock, address):
+        if sock.family in (socket.AF_INET, socket.AF_INET6):
+            check(address[0], address[1])
+        return original_connect(sock, address)
+
+    def connect_ex(sock, address):
+        if sock.family in (socket.AF_INET, socket.AF_INET6):
+            check(address[0], address[1])
+        return original_ex(sock, address)
+
+    def dns(host, port, *args, **kwargs):
+        if host is not None:
+            check(host, port, lookup=True)
+        return original_dns(host, port, *args, **kwargs)
+
+    # Undo before pytest closes/replaces the event loop. Windows constructs its
+    # loop self-pipe through a socketpair before entering this async fixture.
+    with monkeypatch.context() as guard:
+        guard.setattr(worker, "warm_deferred_imports", lambda: None)
+        guard.setattr(socket.socket, "connect", connect)
+        guard.setattr(socket.socket, "connect_ex", connect_ex)
+        guard.setattr(socket, "getaddrinfo", dns)
+        yield
+        assert violations == []
+        assert not ALLOWED_PORTS
 
 
 def tagged(frame, source):

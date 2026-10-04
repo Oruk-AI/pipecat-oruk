@@ -134,6 +134,12 @@ Run under a finite owned process-group supervisor with a minimal credential-free
 environment. The tests themselves permit only the exact active loopback port,
 retain a sticky external-network refusal counter, and close their listener,
 clients and provider tasks in `finally`. They never call a model or provider.
+The guard is installed after asyncio creates its platform event loop and is
+removed before loop teardown; Windows' internal socketpair is outside that
+scope. No arbitrary loopback ports are allowed during a test. The shared
+synthetic-provider fixture disables Pipecat 1.8.1's optional NLTK cache warm-up
+to avoid a first-run tokenizer download. These tests do not qualify NLTK
+tokenization or a production image's tokenizer provisioning.
 The pre-existing pipeline/tool interruption suites should also be run because
 the new optional seam shares `pipeline.py`. Source authorship alone is not a
 passing test result; qualification results belong to the saved run receipts.

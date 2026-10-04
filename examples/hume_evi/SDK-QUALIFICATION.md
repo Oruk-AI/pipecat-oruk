@@ -42,6 +42,10 @@ failures. Plain local WebSockets establish no TLS/SNI/certificate conclusion.
 The SDK's `ChatSocket.close()` invokes its public close handler immediately; the
 fixture separately waits for the underlying native WebSocket and socket closure,
 then the Python side checks provider finalization and gateway-owner release.
+The Python owner uses the shared synthetic-provider guard described in
+`GATEWAY.md`: it excludes platform event-loop construction and disables only
+the optional NLTK warm-up. Tokenizer provisioning and tokenization are outside
+this qualification; the actual SDK, sockets and pipeline remain in use.
 
 Only synthetic credentials appear in memory. Access logging is disabled, and
 failure output contains fixed phase/code fields rather than raw exceptions or

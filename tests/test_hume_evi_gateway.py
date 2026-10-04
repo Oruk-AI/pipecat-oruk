@@ -6,9 +6,7 @@ Root/application owns a finite outer process deadline in addition to these joins
 import asyncio
 import base64
 import io
-import ipaddress
 import json
-import socket
 from types import SimpleNamespace
 import wave
 
@@ -18,40 +16,9 @@ from pipecat.frames.frames import EndFrame, LLMTextFrame
 from pipecat.processors.frame_processor import FrameDirection
 
 from examples.hume_evi.gateway import GatewayLimits, ProviderBridge, Session, TURN, create_gateway
-from hume_gateway_helpers import ALLOWED_PORTS, KEY, SETTINGS, NamedTTS, local_gateway
+from hume_gateway_helpers import KEY, SETTINGS, NamedTTS, local_gateway
+from hume_gateway_helpers import exact_loopback_only  # noqa: F401 - autouse fixture
 from hume_helpers import eventually
-
-
-@pytest.fixture(autouse=True)
-def exact_loopback_only(monkeypatch):
-    violations = []
-    original_connect, original_ex, original_dns = socket.socket.connect, socket.socket.connect_ex, socket.getaddrinfo
-    def check(host, port, *, lookup=False):
-        try:
-            valid = ipaddress.ip_address(host).is_loopback and (port in ALLOWED_PORTS or (lookup and port == 0))
-        except ValueError:
-            valid = False
-        if not valid:
-            violations.append("blocked_destination")
-            raise AssertionError("external_or_unowned_network_prohibited")
-    def connect(sock, address):
-        if sock.family in (socket.AF_INET, socket.AF_INET6):
-            check(address[0], address[1])
-        return original_connect(sock, address)
-    def connect_ex(sock, address):
-        if sock.family in (socket.AF_INET, socket.AF_INET6):
-            check(address[0], address[1])
-        return original_ex(sock, address)
-    def dns(host, port, *args, **kwargs):
-        if host is not None:
-            check(host, port, lookup=True)
-        return original_dns(host, port, *args, **kwargs)
-    monkeypatch.setattr(socket.socket, "connect", connect)
-    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
-    monkeypatch.setattr(socket, "getaddrinfo", dns)
-    yield
-    assert violations == []
-    assert not ALLOWED_PORTS
 
 
 async def receive_until(ws, kind, *, timeout=4):

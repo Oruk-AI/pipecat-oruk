@@ -8,44 +8,12 @@ import asyncio
 import json
 import os
 from pathlib import Path
-import socket
 
 import pytest
 
-from hume_gateway_helpers import ALLOWED_PORTS, local_gateway
+from hume_gateway_helpers import local_gateway
+from hume_gateway_helpers import exact_loopback_only  # noqa: F401 - autouse fixture
 from hume_helpers import eventually
-
-
-@pytest.fixture(autouse=True)
-def exact_loopback_only(monkeypatch):
-    violations = []
-    original_connect, original_ex, original_dns = socket.socket.connect, socket.socket.connect_ex, socket.getaddrinfo
-
-    def check(host, port, lookup=False):
-        if host != "127.0.0.1" or not (port in ALLOWED_PORTS or (lookup and port == 0)):
-            violations.append("unowned_destination")
-            raise AssertionError("unowned_destination")
-
-    def connect(sock, address):
-        if sock.family in (socket.AF_INET, socket.AF_INET6):
-            check(address[0], address[1])
-        return original_connect(sock, address)
-
-    def connect_ex(sock, address):
-        if sock.family in (socket.AF_INET, socket.AF_INET6):
-            check(address[0], address[1])
-        return original_ex(sock, address)
-
-    def dns(host, port, *args, **kwargs):
-        if host is not None:
-            check(host, port, True)
-        return original_dns(host, port, *args, **kwargs)
-
-    monkeypatch.setattr(socket.socket, "connect", connect)
-    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
-    monkeypatch.setattr(socket, "getaddrinfo", dns)
-    yield
-    assert violations == [] and not ALLOWED_PORTS
 
 
 def selected_path(name, *, directory=False):
