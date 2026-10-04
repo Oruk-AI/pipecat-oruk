@@ -138,6 +138,22 @@ This is contract evidence only. It does not qualify any real provider's
 accuracy, latency, cost, retention, voice rights or interruption feel. Those
 still need the customer's selected providers and permitted audio.
 
+### Concrete stack: Oruk STT with OpenAI LLM and TTS
+
+`provider_factory.oruk_openai_providers(OrukOpenAISettings(...))` builds the gateway's provider factory:
+
+- **VAD:** Silero, through `ScopedVAD`.
+- **STT:** Oruk realtime, one turn per utterance. Phrase emotions are off and there is no connection retry.
+- **LLM:** `OpenAILLMService` with turn tagging and SDK retries disabled.
+- **TTS:** OpenAI-compatible speech.
+
+Settings are explicit and validated, and their `repr` omits keys. Nothing is read from the environment, and no listener is started. Each session gets fresh clients, and `close` closes all of them. `tests/test_hume_evi_provider_factory.py` covers three things:
+- offline construction with the real Silero model
+- client ownership
+- a loopback session through the repository's fake Oruk realtime gateway and the fake OpenAI-compatible endpoints
+
+Model, voice and endpoint choices remain the deployer's and are not qualified here.
+
 ## Bounds and failure behavior
 
 Default local bounds are two concurrent sessions, 2,000 input messages, eight
