@@ -272,7 +272,8 @@ async def test_adapter_bounds_refuse_invalid_configuration():
         ScopedSynthesisTTS(openai_speech_synthesizer(None), max_chars=True)
 
 
-@pytest.mark.parametrize("audio", [b"", b"\x01", b"\x00" * 96_001])
+@pytest.mark.parametrize("audio", [b"", b"\x01", b"\x00" * 96_001],
+                         ids=["empty", "partial-sample", "oversized"])
 async def test_tts_refuses_empty_partial_sample_and_oversized_provider_chunks(audio):
     from pipecat.frames.frames import ErrorFrame, TTSTextFrame, TTSStoppedFrame
     frames, finalized = [], asyncio.Event()
