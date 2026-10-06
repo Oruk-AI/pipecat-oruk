@@ -61,7 +61,7 @@ The existing injectable pipeline remains the owner. Its optional
 old pipeline defaults unchanged. The gateway forces expression signals off
 and disables the greeting; it does not create another provider framework.
 
-The factory must return four distinct fresh processors (STT, LLM, TTS, VAD)
+The factory may be synchronous or asynchronous. It must return four distinct fresh processors (STT, LLM, TTS, VAD)
 plus an async `close` callback. It must acquire no unowned work before returning
 the bundle. Pipecat cancellation is joined first; `close` then joins any owned
 provider resources/callbacks not already handled by framework teardown.
@@ -147,7 +147,16 @@ still need the customer's selected providers and permitted audio.
 - **LLM:** `OpenAILLMService` with turn tagging and SDK retries disabled.
 - **TTS:** OpenAI-compatible speech.
 
-Settings are explicit and validated, and their `repr` omits keys. Nothing is read from the environment, and no listener is started. Each session gets fresh clients, and `close` closes all of them. `tests/test_hume_evi_provider_factory.py` covers three things:
+Settings are explicit and validated, and their `repr` omits keys. Await this
+factory when calling it directly; the gateway also accepts it. It pins the
+SDK endpoint/account settings explicitly, ignores HTTP environment proxies,
+disables redirects and retries, and refuses `OPENAI_CUSTOM_HEADERS` before
+constructing clients. Endpoint parsing rejects loopback lookalikes, embedded
+credentials, query strings and fragments. No listener is started. Each session
+gets fresh clients; construction failures and `close` join cleanup for every
+acquired transport/client. Provider billing still needs separate reconciliation.
+The synthesis adapter bounds pending work to 32 items by default and refuses
+empty/truncated PCM or oversized provider chunks. `tests/test_hume_evi_provider_factory.py` covers:
 - offline construction with the real Silero model
 - client ownership
 - a loopback session through the repository's fake Oruk realtime gateway and the fake OpenAI-compatible endpoints

@@ -389,15 +389,20 @@ class ScopedSynthesisTTS(FrameProcessor):
     provider bridge observes it.
     """
 
-    def __init__(self, synthesize: Synthesizer, *, max_chars: int = 2_000, timeout: float = 20.0):
+    def __init__(self, synthesize: Synthesizer, *, max_chars: int = 2_000, timeout: float = 20.0,
+                 max_pending: int = 32):
         super().__init__()
         if type(max_chars) is not int or not 1 <= max_chars <= 8_000:
             raise ValueError("max_chars must be an integer in [1, 8000]")
         if isinstance(timeout, bool) or not 0 < timeout <= 120:
             raise ValueError("timeout must be in (0, 120] seconds")
+        if type(max_pending) is not int or not 1 <= max_pending <= 128:
+            raise ValueError("max_pending must be an integer in [1, 128]")
         self._synthesize = synthesize
         self._max_chars = max_chars
         self._timeout = timeout
+        self._max_pending = max_pending
+        self._failed = False
         self._pending: dict[str, str] = {}
         self._queue: deque = deque()
         self._ready = asyncio.Event()
@@ -429,6 +434,8 @@ class ScopedSynthesisTTS(FrameProcessor):
         if direction != FrameDirection.DOWNSTREAM:
             await self.push_frame(frame, direction)
             return
+        if self._failed:
+            return
         if isinstance(frame, LLMTextFrame):
             turn = frame.metadata.get(TURN)
             if not isinstance(turn, str):
@@ -437,28 +444,42 @@ class ScopedSynthesisTTS(FrameProcessor):
             if getattr(frame, "skip_tts", None):
                 return
             text = self._pending.get(turn, "") + frame.text
+            if len(text) > self._max_chars:
+                await self._refuse("tts_text_too_long")
+                return
             *complete, rest = _SENTENCE_END.split(text)
             for sentence in complete:
-                self._enqueue(("speak", turn, sentence))
-            if len(rest) > self._max_chars:
-                await _fail(self, "tts_text_too_long", FrameDirection.UPSTREAM)
-                return
+                if not self._enqueue(("speak", turn, sentence)):
+                    await self._refuse("tts_pending_limit")
+                    return
             self._pending[turn] = rest
             return
         if isinstance(frame, LLMFullResponseEndFrame):
             turn = frame.metadata.get(TURN)
             rest = self._pending.pop(turn, "") if isinstance(turn, str) else ""
             if rest.strip():
-                self._enqueue(("speak", turn, rest))
-            self._enqueue(("forward", frame))
+                if not self._enqueue(("speak", turn, rest)):
+                    await self._refuse("tts_pending_limit")
+                    return
+            if not self._enqueue(("forward", frame)):
+                await self._refuse("tts_pending_limit")
             return
         await self.push_frame(frame, direction)
 
     def _enqueue(self, item):
         if item[0] == "speak" and not item[2].strip():
-            return
+            return True
+        if self._failed or len(self._queue) >= self._max_pending:
+            return False
         self._queue.append(item)
         self._ready.set()
+        return True
+
+    async def _refuse(self, code):
+        self._failed = True
+        self._pending.clear()
+        self._queue.clear()
+        await _fail(self, code, FrameDirection.UPSTREAM)
 
     def _start_worker(self):
         if self._worker is None:
@@ -467,7 +488,9 @@ class ScopedSynthesisTTS(FrameProcessor):
     async def _drain(self):
         """Speak what was already accepted before a graceful end, within bounds."""
         for turn, rest in list(self._pending.items()):
-            self._enqueue(("speak", turn, rest))
+            if not self._enqueue(("speak", turn, rest)):
+                await self._refuse("tts_pending_limit")
+                break
         self._pending.clear()
         try:
             async with asyncio.timeout(self._timeout * (len(self._queue) + 1)):
@@ -478,6 +501,7 @@ class ScopedSynthesisTTS(FrameProcessor):
 
     async def _stop_worker(self):
         self._queue.clear()
+        self._pending.clear()
         self._ready.clear()
         task, self._worker = self._worker, None
         if task is not None and not task.done():
@@ -493,6 +517,8 @@ class ScopedSynthesisTTS(FrameProcessor):
                     if item[0] == "forward":
                         await self.push_frame(item[1])
                     elif not await self._speak(item[1], item[2].strip()):
+                        self._failed = True
+                        self._pending.clear()
                         self._queue.clear()
                 finally:
                     self._busy = False
@@ -509,13 +535,15 @@ class ScopedSynthesisTTS(FrameProcessor):
         resampler, stream_rate = None, None
         carry = b""
         out = b""
+        input_bytes = 0
         try:
             async with asyncio.timeout(self._timeout), contextlib.aclosing(self._synthesize(text)) as stream:
                 async for audio, rate in stream:
-                    if (not isinstance(audio, (bytes, bytearray)) or type(rate) is not int
+                    if (not isinstance(audio, (bytes, bytearray)) or len(audio) > 96_000 or type(rate) is not int
                             or not 8_000 <= rate <= 48_000 or rate != (stream_rate or rate)):
                         await _fail(self, "tts_invalid_audio", FrameDirection.UPSTREAM)
                         return False
+                    input_bytes += len(audio)
                     if stream_rate is None:
                         stream_rate = rate
                         if rate != OUTPUT_RATE:
@@ -532,6 +560,9 @@ class ScopedSynthesisTTS(FrameProcessor):
                     while len(out) >= MAX_OUTPUT_BYTES:
                         await self._audio(turn, out[:MAX_OUTPUT_BYTES])
                         out = out[MAX_OUTPUT_BYTES:]
+                if carry or not input_bytes:
+                    await _fail(self, "tts_incomplete_audio", FrameDirection.UPSTREAM)
+                    return False
                 if resampler is not None:
                     out += resampler.resample_chunk(np.zeros(0, dtype=np.int16), last=True).tobytes()
                     while len(out) >= MAX_OUTPUT_BYTES:

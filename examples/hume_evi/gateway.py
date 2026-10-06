@@ -13,6 +13,7 @@ from collections import deque
 from dataclasses import dataclass, replace
 import io
 import json
+import inspect
 import math
 import time
 from typing import Awaitable, Callable
@@ -693,6 +694,8 @@ class Gateway:
                 # a usable, non-reused finalizer is owned, closure is unknown.
                 session.acquisition_uncertain = True
                 bundle = self.providers(configured)
+                if inspect.isawaitable(bundle):
+                    bundle = await bundle
                 require(isinstance(bundle, Providers) and callable(bundle.close), "invalid_provider_bundle")
                 processors = (bundle.stt, bundle.llm, bundle.tts, bundle.vad)
                 # Never call a reused bundle's close: it may belong to another
@@ -744,7 +747,7 @@ GATEWAY = web.AppKey("oruk_evi_pcm_gateway", Gateway)
 
 
 def create_gateway(*, enabled=False, authenticate: Callable[[str], Awaitable[bool]] | None = None,
-                   providers: Callable[[Config], Providers] | None = None,
+                   providers: Callable[[Config], Providers | Awaitable[Providers]] | None = None,
                    config=Config(greeting=""), limits=GatewayLimits()):
     """Construct an unbound local profile. The caller owns its HTTP listener.
 

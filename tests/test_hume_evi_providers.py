@@ -270,3 +270,43 @@ async def test_adapter_bounds_refuse_invalid_configuration():
         ScopedUtteranceSTT(openai_transcriber(None), timeout=0)
     with pytest.raises(ValueError):
         ScopedSynthesisTTS(openai_speech_synthesizer(None), max_chars=True)
+
+
+@pytest.mark.parametrize("audio", [b"", b"\x01", b"\x00" * 96_001])
+async def test_tts_refuses_empty_partial_sample_and_oversized_provider_chunks(audio):
+    from pipecat.frames.frames import ErrorFrame, TTSTextFrame, TTSStoppedFrame
+    frames, finalized = [], asyncio.Event()
+    async def synthesize(_text):
+        try:
+            yield audio, 24_000
+        finally:
+            finalized.set()
+    tts = ScopedSynthesisTTS(synthesize)
+    async def capture(frame, direction=None):
+        frames.append(frame)
+    tts.push_frame = capture
+    assert await tts._speak("issued-turn", "Synthetic sentence.") is False
+    assert finalized.is_set() and any(isinstance(f, ErrorFrame) for f in frames)
+    assert not any(isinstance(f, (TTSTextFrame, TTSStoppedFrame)) for f in frames)
+
+
+async def test_tts_queue_overflow_is_terminal_and_never_starts_synthesis():
+    from pipecat.frames.frames import ErrorFrame, LLMTextFrame
+    from pipecat.processors.frame_processor import FrameDirection
+    from examples.hume_evi.gateway import TURN
+    frames, called = [], []
+    async def synthesize(text):
+        called.append(text)
+        yield b"\x00\x00", 24_000
+    tts = ScopedSynthesisTTS(synthesize, max_pending=2)
+    async def capture(frame, direction=None):
+        frames.append(frame)
+    tts.push_frame = capture
+    first = LLMTextFrame("One. Two. Three. Four. ")
+    first.metadata[TURN] = "issued-turn"
+    await tts.process_frame(first, FrameDirection.DOWNSTREAM)
+    later = LLMTextFrame("Must not become another request. ")
+    later.metadata[TURN] = "issued-turn"
+    await tts.process_frame(later, FrameDirection.DOWNSTREAM)
+    assert [f.error for f in frames if isinstance(f, ErrorFrame)] == ["tts_pending_limit"]
+    assert not tts._queue and not tts._pending and not called

@@ -54,7 +54,7 @@ def test_settings_repr_never_contains_keys():
 
 async def test_factory_builds_fresh_offline_bundles_with_silero_and_closes_every_client():
     factory = oruk_openai_providers(BASE)
-    first, second = factory(Config()), factory(Config())
+    first, second = await factory(Config()), await factory(Config())
     for bundle in (first, second):
         assert isinstance(bundle, Providers)
         assert isinstance(bundle.vad, ScopedVAD) and isinstance(bundle.stt, ScopedUtteranceSTT)
@@ -81,8 +81,8 @@ async def test_oruk_stt_and_openai_llm_tts_stack_end_to_end(gateway):
                 settings = replace(BASE, oruk_endpoint=oruk.endpoint, openai_base_url=base)
                 inner = oruk_openai_providers(settings, vad_analyzer=lambda _params: EnergyVAD(params=VAD_PARAMS))
 
-                def factory(config):
-                    bundle = inner(config)
+                async def factory(config):
+                    bundle = await inner(config)
                     owner = SimpleNamespace(stt=bundle.stt, tts=bundle.tts, closed=asyncio.Event())
                     made.append(owner)
 
@@ -113,3 +113,66 @@ async def test_oruk_stt_and_openai_llm_tts_stack_end_to_end(gateway):
                 await closed(gateway_state, made)
         finally:
             ALLOWED_PORTS.discard(port)
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1.example.com/v1", "http://127.0.0.1@evil.example/v1",
+    "http://127.0.0.10/v1", "https:///v1", "https://user:secret@example.com/v1",
+    "https://example.com/v1?key=secret", "https://example.com/v1#fragment",
+    "https://example.com:99999/v1", "https://example.com/\npath",
+    "https://example.com\\@127.0.0.1/v1",
+])
+def test_provider_base_url_refuses_lookalikes_and_ambiguous_authority(url):
+    with pytest.raises(ValueError, match="invalid_openai_base_url"):
+        replace(BASE, openai_base_url=url)
+
+
+async def test_factory_ignores_ambient_endpoint_account_and_proxy(monkeypatch):
+    for key in ("OPENAI_BASE_URL", "OPENAI_ORG_ID", "OPENAI_PROJECT_ID", "OPENAI_ADMIN_KEY",
+                "OPENAI_WEBHOOK_SECRET", "HTTPS_PROXY", "HTTP_PROXY"):
+        monkeypatch.setenv(key, "http://unowned.invalid")
+    bundle = await oruk_openai_providers(BASE, vad_analyzer=lambda _p: EnergyVAD(params=VAD_PARAMS))(Config())
+    try:
+        speech = next(c.cell_contents for c in bundle.tts._synthesize.__closure__
+                      if type(c.cell_contents).__name__ == "AsyncOpenAI")
+        for client in (bundle.llm._client, speech):
+            assert str(client.base_url) == "https://api.openai.com/v1/"
+            assert client.organization == client.project == client.admin_api_key == client.webhook_secret == ""
+            assert client.max_retries == 0
+            assert client._client.trust_env is False and client._client.follow_redirects is False
+    finally:
+        await bundle.close()
+
+
+async def test_custom_headers_environment_is_refused_before_sdk_creation(monkeypatch):
+    from examples.hume_evi import provider_factory as module
+    monkeypatch.setenv("OPENAI_CUSTOM_HEADERS", "Authorization: synthetic-other-credential")
+    def forbidden(**_kwargs):
+        raise AssertionError("SDK must not construct with ambient headers")
+    monkeypatch.setattr(module, "AsyncOpenAI", forbidden)
+    with pytest.raises(ValueError, match="ambient_openai_custom_headers_refused"):
+        await oruk_openai_providers(BASE, vad_analyzer=lambda _p: EnergyVAD(params=VAD_PARAMS))(Config())
+
+
+@pytest.mark.parametrize("stage", ["new_http_session", "ScopedSynthesisTTS"])
+async def test_partial_factory_failure_closes_every_acquired_client(monkeypatch, stage):
+    from examples.hume_evi import provider_factory as module
+    clients, sessions = [], []
+    original_client, original_session = module._explicit_openai_client, module.new_http_session
+    def client(*args):
+        result = original_client(*args)
+        clients.append(result)
+        return result
+    def session():
+        result = original_session()
+        sessions.append(result)
+        return result
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("synthetic_construction_failure")
+    monkeypatch.setattr(module, "_explicit_openai_client", client)
+    monkeypatch.setattr(module, "new_http_session", session)
+    monkeypatch.setattr(module, stage, fail)
+    with pytest.raises(RuntimeError, match="synthetic_construction_failure"):
+        await oruk_openai_providers(BASE, vad_analyzer=lambda _p: EnergyVAD(params=VAD_PARAMS))(Config())
+    assert len(clients) == 2 and all(c.is_closed() for c in clients)
+    assert len(sessions) == (stage == "ScopedSynthesisTTS") and all(s.closed for s in sessions)
