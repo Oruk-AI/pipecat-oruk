@@ -205,11 +205,17 @@ def create_app(*, inbound_token: str, oruk_api_key: str, enabled: bool = False,
                     await _session(socket, http, oruk_api_key, endpoint, factory())
         except asyncio.CancelledError:
             raise
+        except web.HTTPException:
+            raise
         except Exception:
-            await socket.close(code=1011, message=b"transcriber_session_failed")
+            if socket.prepared:
+                await socket.close(code=1011, message=b"transcriber_session_failed")
         finally:
-            await socket.close()
-            state["active"].discard(owner)
+            try:
+                if socket.prepared:
+                    await socket.close()
+            finally:
+                state["active"].discard(owner)
         return socket
 
     async def shutdown(_app):

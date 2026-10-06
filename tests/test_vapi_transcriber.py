@@ -117,6 +117,17 @@ async def test_disabled_and_unauthenticated_never_dispatch(gateway):
         assert native.requests == 0
 
 
+async def test_failed_websocket_upgrade_releases_reserved_capacity(gateway):
+    async with gateway() as native:
+        async with bridge(native.endpoint, enabled=True, max_sessions=1) as (client, url, app):
+            async with client.get(url, headers={"Authorization": "Bearer " + TOKEN}) as failed:
+                assert failed.status == 400
+            assert not app[STATE]["active"] and native.requests == 0
+            ws = await connect(client, url)
+            assert len(app[STATE]["active"]) == 1
+            await ws.close()
+
+
 async def test_partials_before_commit_exact_caller_audio_final_after_clean_close(gateway):
     async with gateway() as native:
         async with bridge(native.endpoint, enabled=True) as (client, url, app):
