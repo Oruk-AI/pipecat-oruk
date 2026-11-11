@@ -8,6 +8,10 @@ Stream speech to Oruk's realtime preview and receive interim transcripts, final 
 
 See the [Oruk service guide in Pipecat’s documentation](https://docs.pipecat.ai/api-reference/server/services/stt/oruk) for setup, configuration, and a pipeline example.
 
+Oruk's own notes for this adapter are in the [Pipecat section of the Oruk SDK docs](https://oruk.ai/docs/sdks?utm_source=github&utm_medium=readme&utm_campaign=pipecat#pipecat); the WebSocket contract it speaks is the [Oruk Realtime API reference](https://oruk.ai/docs/realtime?utm_source=github&utm_medium=readme&utm_campaign=pipecat).
+
+Hosted Oruk Realtime status: preview; 10-minute session cap; no published latency yet.
+
 For a voice-agent migration that preserves your existing STT, see the [Hume EVI starter](examples/hume_evi/README.md). It includes injectable STT/LLM/TTS services, a synthetic tool, lifecycle tests and an optional bounded Oruk expression sidecar. The CLI keeps signals trace-only until exact primary-provider audio correlation is verified; external-provider/browser end-to-end validation remains pending.
 
 ## Install
