@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+Documentation only: link the Pipecat section of the Oruk SDK docs and the Oruk Realtime API reference from the README (which is also the PyPI long description), and state the hosted endpoint's status in one line: preview, 10-minute session cap, no published latency yet. No code, dependency or version change; nothing was published to PyPI.
+
 ## 0.1.0rc3 — 2026-09-18
 
 Documentation-only follow-up: point both hosted and local installation commands to the released package instead of the older hosted-only candidate or a source checkout. Model files, runtime code, dependencies and behavior are unchanged from `0.1.0rc2`.
