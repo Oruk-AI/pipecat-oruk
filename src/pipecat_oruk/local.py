@@ -1,4 +1,4 @@
-"""Optional local Orukeet recognition for VAD-segmented utterances."""
+"""Local, utterance-level speech recognition for Pipecat."""
 
 from __future__ import annotations
 
@@ -20,7 +20,64 @@ from pipecat.utils.time import time_now_iso8601
 MODEL = "oruk/orukeet"
 
 
-class OrukeetSTTService(SegmentedSTTService):
+class _LocalSTTService(SegmentedSTTService):
+    """Handle one Pipecat VAD segment at a time, outside the event loop."""
+
+    transcript_language = None
+    _runtime: Any
+
+    @staticmethod
+    def _validate_settings(settings: STTSettings) -> None:
+        raise NotImplementedError
+
+    async def prewarm(self) -> None:
+        """Download, verify and load the model without blocking the event loop."""
+        await asyncio.to_thread(self._runtime.prewarm)
+
+    async def _update_settings(self, delta: STTSettings) -> dict[str, Any]:
+        try:
+            self._validate_settings(delta)
+        except ValueError as exc:
+            await self.push_error(str(exc), category=ErrorCategory.APPLICATION)
+            return {}
+        return await super()._update_settings(delta)
+
+    async def process_audio_frame(
+        self, frame: AudioRawFrame, direction: FrameDirection
+    ) -> None:
+        """Reject mismatched audio before its metadata is replaced by a WAV header."""
+        if (
+            frame.sample_rate != 16000
+            or frame.num_channels != 1
+            or len(frame.audio) % 2
+        ):
+            raise ValueError(f"{type(self).__name__} requires mono PCM16 at 16 kHz.")
+        await super().process_audio_frame(frame, direction)
+
+    async def run_stt(self, audio: bytes) -> AsyncGenerator[Frame, None]:
+        """Recognize the WAV segment supplied by SegmentedSTTService."""
+        with wave.open(io.BytesIO(audio), "rb") as source:
+            if (
+                source.getframerate() != 16000
+                or source.getnchannels() != 1
+                or source.getsampwidth() != 2
+            ):
+                raise ValueError(f"{type(self).__name__} requires mono PCM16 at 16 kHz.")
+            pcm = source.readframes(source.getnframes())
+        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+        text = await asyncio.to_thread(self._runtime.recognize, samples, 16000)
+        if text:
+            yield TranscriptionFrame(
+                text, self._user_id, time_now_iso8601(), language=self.transcript_language
+            )
+
+    async def cleanup(self) -> None:
+        """Cancel pending framework work, then wait for native inference and release it."""
+        await super().cleanup()
+        await asyncio.to_thread(self._runtime.close)
+
+
+class OrukeetSTTService(_LocalSTTService):
     """Transcribe complete utterances locally on CPU with Orukeet INT8.
 
     Feed mono PCM16 at 16 kHz after Pipecat's VADProcessor. This service emits
@@ -62,10 +119,6 @@ class OrukeetSTTService(SegmentedSTTService):
         )
         self._runtime = Model(cache_dir=cache_dir, local_files_only=local_files_only)
 
-    async def prewarm(self) -> None:
-        """Download, verify and load the model without blocking the event loop."""
-        await asyncio.to_thread(self._runtime.prewarm)
-
     @staticmethod
     def _validate_settings(settings: STTSettings) -> None:
         fields = settings.given_fields()
@@ -77,45 +130,3 @@ class OrukeetSTTService(SegmentedSTTService):
             raise ValueError(
                 "Orukeet uses a fixed model and automatic language detection."
             )
-
-    async def _update_settings(self, delta: STTSettings) -> dict[str, Any]:
-        try:
-            self._validate_settings(delta)
-        except ValueError as exc:
-            await self.push_error(str(exc), category=ErrorCategory.APPLICATION)
-            return {}
-        return await super()._update_settings(delta)
-
-    async def process_audio_frame(
-        self, frame: AudioRawFrame, direction: FrameDirection
-    ) -> None:
-        """Reject mismatched audio before its metadata is replaced by a WAV header."""
-        if (
-            frame.sample_rate != 16000
-            or frame.num_channels != 1
-            or len(frame.audio) % 2
-        ):
-            raise ValueError("OrukeetSTTService requires mono PCM16 at 16 kHz.")
-        await super().process_audio_frame(frame, direction)
-
-    async def run_stt(self, audio: bytes) -> AsyncGenerator[Frame, None]:
-        """Recognize the WAV segment supplied by SegmentedSTTService."""
-        with wave.open(io.BytesIO(audio), "rb") as source:
-            if (
-                source.getframerate() != 16000
-                or source.getnchannels() != 1
-                or source.getsampwidth() != 2
-            ):
-                raise ValueError("OrukeetSTTService requires mono PCM16 at 16 kHz.")
-            pcm = source.readframes(source.getnframes())
-        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-        text = await asyncio.to_thread(self._runtime.recognize, samples, 16000)
-        if text:
-            yield TranscriptionFrame(
-                text, self._user_id, time_now_iso8601(), language=None
-            )
-
-    async def cleanup(self) -> None:
-        """Cancel pending framework work, then wait for native inference and release it."""
-        await super().cleanup()
-        await asyncio.to_thread(self._runtime.close)
