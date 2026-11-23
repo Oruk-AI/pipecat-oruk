@@ -24,10 +24,10 @@ Set `ORUK_API_KEY` in the server environment using a key from your Oruk develope
 
 ## Local English dictation with Fourier
 
-The optional `FourierSTTService` runs the [Fourier 2B English model](https://huggingface.co/oruk/oruk-fourier-2b) on CPU. From this checkout, install the optional dependencies and transcribe a mono 16 kHz PCM16 WAV:
+The optional `FourierSTTService` runs the [Fourier 2B English model](https://huggingface.co/oruk/oruk-fourier-2b) on CPU. Install the [PyPI prerelease](https://pypi.org/project/pipecat-oruk/0.1.0rc4/) and run the file example from this checkout on a mono 16 kHz PCM16 WAV:
 
 ```bash
-python -m pip install '.[fourier]'
+python -m pip install 'pipecat-oruk[fourier]==0.1.0rc4'
 python examples/pipecat_local_file.py recording.wav --model fourier
 ```
 
