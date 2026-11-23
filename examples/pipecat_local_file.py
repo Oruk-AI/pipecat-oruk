@@ -1,4 +1,4 @@
-"""Transcribe a mono 16 kHz PCM16 WAV through local Orukeet and Pipecat VAD."""
+"""Transcribe a mono 16 kHz PCM16 WAV through a local Oruk model and Pipecat VAD."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ class PrintResults(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
-async def transcribe(path: str, offline: bool) -> None:
+async def transcribe(path: str, offline: bool, model: str = "orukeet") -> None:
     with wave.open(path, "rb") as source:
         if (source.getframerate(), source.getnchannels(), source.getsampwidth()) != (
             16000,
@@ -53,7 +53,12 @@ async def transcribe(path: str, offline: bool) -> None:
             raise ValueError("This file example accepts up to 60 seconds of audio")
         pcm = source.readframes(source.getnframes())
 
-    stt = OrukeetSTTService(local_files_only=offline)
+    if model == "fourier":
+        from pipecat_oruk.fourier import FourierSTTService
+
+        stt = FourierSTTService(local_files_only=offline)
+    else:
+        stt = OrukeetSTTService(local_files_only=offline)
     await stt.prewarm()
     vad = VADProcessor(
         vad_analyzer=SileroVADAnalyzer(params=VADParams(start_secs=0.2, stop_secs=0.3))
@@ -95,12 +100,13 @@ async def transcribe(path: str, offline: bool) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("wav")
+    parser.add_argument("--model", choices=("orukeet", "fourier"), default="orukeet")
     parser.add_argument(
         "--offline", action="store_true", help="Require a complete Hugging Face cache"
     )
     args = parser.parse_args()
     try:
-        asyncio.run(transcribe(args.wav, args.offline))
+        asyncio.run(transcribe(args.wav, args.offline, args.model))
     except (ValueError, RuntimeError, OSError, wave.Error) as exc:
         print(str(exc), file=sys.stderr)
         return 1

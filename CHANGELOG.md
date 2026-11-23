@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0rc4
+
+- Add `FourierSTTService` for local English speech turns. Install the `fourier` extra and select `--model fourier` in the local WAV example. The first run verifies the original Q8 download. Later runs can use the cached file offline.
+
 ## 0.1.0rc3 — 2026-09-18
 
 Documentation-only follow-up: point both hosted and local installation commands to the released package instead of the older hosted-only candidate or a source checkout. Model files, runtime code, dependencies and behavior are unchanged from `0.1.0rc2`.

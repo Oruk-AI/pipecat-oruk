@@ -13,21 +13,41 @@ See the [Oruk service guide in Pipecat’s documentation](https://docs.pipecat.a
 Use a Python virtual environment and pin the release candidate explicitly:
 
 ```sh
-python -m pip install 'pipecat-oruk==0.1.0rc3'
+python -m pip install 'pipecat-oruk==0.1.0rc4'
 ```
 
-For the browser transport dependencies, install `pipecat-oruk[agent]==0.1.0rc3`. The examples below live in this repository; clone it to run them. To develop the adapter from a checkout, run `python -m pip install '.'` from the repository root.
+For the browser transport dependencies, install `pipecat-oruk[agent]==0.1.0rc4`. The examples below live in this repository; clone it to run them. To develop the adapter from a checkout, run `python -m pip install '.'` from the repository root.
 
 Set `ORUK_API_KEY` in the server environment using a key from your Oruk developer portal. Keys are sent in an authenticated WebSocket upgrade, never in a URL or browser bundle. The distribution is named `pipecat-oruk` and uses `pipecat_oruk` imports.
+
+## Local English dictation with Fourier
+
+The optional `FourierSTTService` runs the [Fourier 2B English model](https://huggingface.co/oruk/oruk-fourier-2b) on CPU. Install the Fourier extra, then run the example from the source archive on a mono 16 kHz PCM16 WAV:
+
+```bash
+python -m pip install 'pipecat-oruk[fourier]==0.1.0rc4'
+python examples/pipecat_local_file.py recording.wav --model fourier
+```
+
+The first run downloads the original 2.19 GB Q8 file and verifies its SHA-256. Add `--offline` on subsequent runs to require the local cache. In a local Pipecat pipeline, place the service after `VADProcessor` at 16 kHz:
+
+```python
+from pipecat_oruk.fourier import FourierSTTService
+
+stt = FourierSTTService()
+await stt.prewarm()
+```
+
+Each detected utterance emits final English text. The service keeps the model loaded and starts a fresh decoding session for each speech window. A turn longer than 30 seconds splits near the quietest 20 ms in the last two seconds of the window. The package code is MIT. The [model terms](https://huggingface.co/oruk/oruk-fourier-2b#license) permit local noncommercial use. Commercial use or hosted/API serving requires a separate Oruk license.
 
 ## Local Orukeet transcription
 
 The optional `OrukeetSTTService` runs the [Orukeet](https://huggingface.co/oruk/orukeet)
 INT8 ONNX model on CPU. It needs no API key and keeps audio on the machine running
-Pipecat. Install the local extra from the published `0.1.0rc3` release:
+Pipecat. Install the local extra from the `0.1.0rc4` release candidate:
 
 ```sh
-python -m pip install 'pipecat-oruk[local]==0.1.0rc3'
+python -m pip install 'pipecat-oruk[local]==0.1.0rc4'
 python examples/pipecat_local_file.py recording.wav
 ```
 
