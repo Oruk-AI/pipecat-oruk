@@ -27,7 +27,7 @@ jobs:
           python -m twine check --strict *
           python -m pip install './pipecat_oruk-0.1.0rc4-py3-none-any.whl[fourier,test,local,agent]' 'pipecat-ai[deepgram]==1.8.1' 'deepgram-sdk==7.12.0' 'openai==2.54.0'
           python -m pip check
-          tar -xzf pipecat_oruk-0.1.0rc4.tar.gz -C /tmp pipecat_oruk-0.1.0rc4/tests
+          tar -xzf pipecat_oruk-0.1.0rc4.tar.gz -C /tmp
           python -m pytest -q /tmp/pipecat_oruk-0.1.0rc4/tests
       - uses: actions/upload-artifact@v4
         with:
