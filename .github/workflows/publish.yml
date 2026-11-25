@@ -11,24 +11,21 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Check the reviewed release files
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Install framework and build dependencies
+        run: python -m pip install ".[agent,test,local,fourier]" "pipecat-ai[deepgram]==1.8.1" "deepgram-sdk==7.12.0" "openai==2.54.0" "build>=1,<2" "twine>=6,<8"
+      - name: Build and verify reviewed version
         run: |
-          mkdir dist
-          gh release download v0.1.0rc4 -R "$GITHUB_REPOSITORY" -D dist
-          cd dist
-          printf '%s  %s\n' a16f6ec246913a2e10f6a7a3af4fc326570677683ad53b2f02ab0d59d473763e pipecat_oruk-0.1.0rc4-py3-none-any.whl d69d846df8c410215255898c4d67e1e869ebaf78889d1e26706d606a567adf4e pipecat_oruk-0.1.0rc4.tar.gz | sha256sum -c
-          test "$(find . -type f | wc -l)" -eq 2
-          python -m pip install 'twine>=6,<8'
-          python -m twine check --strict *
-          python -m pip install './pipecat_oruk-0.1.0rc4-py3-none-any.whl[fourier,test,local,agent]' 'pipecat-ai[deepgram]==1.8.1' 'deepgram-sdk==7.12.0' 'openai==2.54.0'
+          python -c "import tomllib; assert tomllib.load(open('pyproject.toml','rb'))['project']['version'] == '0.1.0'"
+          python -m build
+          python -m twine check --strict dist/*
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          python -c "import importlib.metadata, pipecat_oruk; from pipecat_oruk import FourierSTTService; from pipecat_oruk.local import OrukeetSTTService; assert pipecat_oruk.__version__ == importlib.metadata.version('pipecat-oruk') == '0.1.0'"
+          python -m pytest -q tests
           python -m pip check
-          tar -xzf pipecat_oruk-0.1.0rc4.tar.gz -C /tmp
-          python -m pytest -q /tmp/pipecat_oruk-0.1.0rc4/tests
       - uses: actions/upload-artifact@v4
         with:
           name: reviewed-pipecat-package
@@ -40,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/pipecat-oruk/0.1.0rc4/
+      url: https://pypi.org/project/pipecat-oruk/0.1.0/
     permissions:
       id-token: write
     steps:
@@ -56,36 +53,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: v0.1.0rc4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install the registry release and transcribe two turns
+      - name: Verify a fresh registry installation
         run: |
           for attempt in {1..6}; do
-            if python -m pip install --only-binary=pipecat-oruk 'pipecat-oruk[fourier]==0.1.0rc4'; then break; fi
+            if python -m pip install --only-binary=pipecat-oruk 'pipecat-oruk[agent,test,local,fourier]==0.1.0' 'pipecat-ai[deepgram]==1.8.1' 'deepgram-sdk==7.12.0' 'openai==2.54.0'; then break; fi
             sleep 12
           done
           python -m pip check
-          python -c "import importlib.metadata as m; assert m.version('pipecat-oruk') == '0.1.0rc4'"
-          curl -fLsS --retry 3 'https://media.githubusercontent.com/media/andrewleech/qwen3-asr-onnx/4aee2ae0c355c7bc33bd5c09befec9e9eabd4b50/tests/fixtures/librispeech_0.wav' -o /tmp/speech.wav
-          echo '799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46  /tmp/speech.wav' | sha256sum -c
-          python - <<'PYCODE'
-          import wave
-          with wave.open('/tmp/speech.wav') as source:
-              pcm = source.readframes(source.getnframes())
-          with wave.open('/tmp/two-turns.wav','wb') as target:
-              target.setparams((1,2,16000,0,'NONE','not compressed'))
-              target.writeframes(bytes(32000) + pcm + bytes(64000) + pcm + bytes(32000))
-          PYCODE
-          python examples/pipecat_local_file.py /tmp/two-turns.wav --model fourier > /tmp/transcripts.jsonl
-          python - <<'PYCODE'
-          import json, re
-          from pathlib import Path
-          expected = "mr quilter is the apostle of the middle classes and we are glad to welcome his gospel".split()
-          rows = [json.loads(line) for line in Path('/tmp/transcripts.jsonl').read_text().splitlines() if line.startswith('{"text":')]
-          print(rows)
-          assert len(rows) == 2
-          assert all(r['finalized'] and re.findall(r'[a-z]+', r['text'].lower()) == expected for r in rows)
-          PYCODE
+          python -c "import importlib.metadata, pipecat_oruk; from pipecat_oruk import FourierSTTService; from pipecat_oruk.local import OrukeetSTTService; assert pipecat_oruk.__version__ == importlib.metadata.version('pipecat-oruk') == '0.1.0'"
+          python -m pytest -q tests

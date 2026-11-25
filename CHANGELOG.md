@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0 — 2026-11-25
+
+- First stable PyPI release (`pip install pipecat-oruk` without `--pre`), consolidating `main` with the `0.1.0rc4` Fourier local GGUF integration.
+- Re-export `FourierSTTService` at top level (`from pipecat_oruk import FourierSTTService`).
+- Add hosted `FourierSTTService(mode="hosted")` targeting `POST https://speech-api.oruk.ai/v1/audio/transcriptions` (`model="oruk-fourier-2b"`) via core `aiohttp` (zero extra dependencies, `ORUK_API_KEY`, English-only validation, safe error redaction).
+- Link the Pipecat section of the Oruk SDK docs and the live Oruk Realtime API anchor (`https://oruk.ai/docs#realtime`), stating the hosted Realtime preview status (10-minute session cap; no published latency yet).
+
+## 0.1.0rc4 — 2026-11-23
+
+- Add optional local CPU English transcription with `FourierSTTService` (`pipecat-oruk[fourier]`, pinned `oruk/oruk-fourier-2b` Q8_0 GGUF with SHA-256 verification).
+
 ## 0.1.0rc3 — 2026-09-18
 
 Documentation-only follow-up: point both hosted and local installation commands to the released package instead of the older hosted-only candidate or a source checkout. Model files, runtime code, dependencies and behavior are unchanged from `0.1.0rc2`.

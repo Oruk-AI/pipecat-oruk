@@ -8,10 +8,17 @@ from ._service import (
     OrukSTTService,
     OrukTurnCompletedFrame,
 )
+from .fourier import FourierSTTService
 from .realtime import RealtimeOptions
 
-__version__ = "0.1.0rc3"
+__version__ = "0.1.0"
 __all__ = [
-    "OrukCommitFrame", "OrukEventFrame", "OrukPhraseEmotionFrame",
-    "OrukSpeakerBoundaryFrame", "OrukSTTService", "OrukTurnCompletedFrame", "RealtimeOptions",
+    "FourierSTTService",
+    "OrukCommitFrame",
+    "OrukEventFrame",
+    "OrukPhraseEmotionFrame",
+    "OrukSTTService",
+    "OrukSpeakerBoundaryFrame",
+    "OrukTurnCompletedFrame",
+    "RealtimeOptions",
 ]

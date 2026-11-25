@@ -4,52 +4,71 @@
 
 Stream speech to Oruk's realtime preview and receive interim transcripts, final text, and independent phrase-emotion estimates. This integration is developed by **oruk labs**, the company providing the API. It is community-maintained by Oruk; it is not maintained or endorsed by Pipecat.
 
-**Release candidate.** The adapter is tested with Pipecat 1.8.1 on Python 3.11, 3.12, 3.13, and 3.14. The package accepts Pipecat 1.8.x; other patch releases require their own recorded checks. Automated tests use a simulated gateway with the real framework. A separate [production browser demonstration](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md) verifies WebRTC, real transcription and phrase estimates, two consecutive turns, cancellation after an interim result, reconnection, and backend metering. This is not an accuracy benchmark or a verified LLM/TTS conversation.
+**Tested matrix.** The adapter is tested with Pipecat 1.8.1 on Python 3.11, 3.12, 3.13, and 3.14. The package accepts Pipecat 1.8.x; other patch releases require their own recorded checks. Automated tests use a simulated gateway with the real framework. A separate [production browser demonstration](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md) verifies WebRTC, real transcription and phrase estimates, two consecutive turns, cancellation after an interim result, reconnection, and backend metering. This is not an accuracy benchmark or a verified LLM/TTS conversation.
 
 See the [Oruk service guide in Pipecat’s documentation](https://docs.pipecat.ai/api-reference/server/services/stt/oruk) for setup, configuration, and a pipeline example.
+
+Oruk's own notes for this adapter are in the [Pipecat section of the Oruk SDK docs](https://oruk.ai/docs/sdks?utm_source=github&utm_medium=readme&utm_campaign=pipecat#pipecat); the WebSocket contract it speaks is documented in the [Oruk Realtime API reference](https://oruk.ai/docs#realtime).
+
+Hosted Oruk Realtime status: preview; 10-minute session cap; no published latency yet.
 
 For a voice-agent migration that preserves your existing STT, see the [Hume EVI starter](examples/hume_evi/README.md). It includes injectable STT/LLM/TTS services, a synthetic tool, lifecycle tests and an optional bounded Oruk expression sidecar. The CLI keeps signals trace-only until exact primary-provider audio correlation is verified; external-provider/browser end-to-end validation remains pending.
 
 ## Install
 
-Use a Python virtual environment and pin the release candidate explicitly:
+Use a Python virtual environment and install the package from PyPI:
 
 ```sh
-python -m pip install 'pipecat-oruk==0.1.0rc3'
+python -m pip install pipecat-oruk
 ```
 
-For the browser transport dependencies, install `pipecat-oruk[agent]==0.1.0rc3`. The examples below live in this repository; clone it to run them. To develop the adapter from a checkout, run `python -m pip install '.'` from the repository root.
+For the browser transport dependencies, install `pipecat-oruk[agent]`. The examples below live in this repository; clone it to run them. To develop the adapter from a checkout, run `python -m pip install '.'` from the repository root.
 
-Set `ORUK_API_KEY` in the server environment using a key from your Oruk developer portal. Keys are sent in an authenticated WebSocket upgrade, never in a URL or browser bundle. The distribution is named `pipecat-oruk` and uses `pipecat_oruk` imports.
+Set `ORUK_API_KEY` in the server environment using a key from your Oruk developer portal. Keys are sent in an authenticated header or WebSocket upgrade, never in a URL or browser bundle. The distribution is named `pipecat-oruk` and uses `pipecat_oruk` imports.
 
-## Local English dictation with Fourier
+## English transcription with Fourier 2B (hosted API and local CPU)
 
-The optional `FourierSTTService` runs the [Fourier 2B English model](https://huggingface.co/oruk/oruk-fourier-2b) on CPU. Install the [PyPI prerelease](https://pypi.org/project/pipecat-oruk/0.1.0rc4/) and run the file example from this checkout on a mono 16 kHz PCM16 WAV:
+`FourierSTTService` is re-exported at top level (`from pipecat_oruk import FourierSTTService`, and `pipecat_oruk.fourier.FourierSTTService` remains available) and supports both Oruk's hosted Speech API and offline local CPU inference for [Oruk Fourier 2B](https://huggingface.co/oruk/oruk-fourier-2b):
+
+### Hosted Fourier 2B (`mode="hosted"`, no extra dependencies)
+
+Sends each VAD-segmented mono 16 kHz PCM16 WAV utterance to `POST https://speech-api.oruk.ai/v1/audio/transcriptions` with `model="oruk-fourier-2b"` (`$0.0080/min`, up to 30 MiB / 60 min per request; requires `ORUK_API_KEY` from [oruk.ai/account/api-keys](https://oruk.ai/account/api-keys)):
+
+```python
+from pipecat_oruk import FourierSTTService
+
+stt = FourierSTTService(mode="hosted")  # reads ORUK_API_KEY
+# Pipeline([transport.input(), vad, stt, ...])
+```
+
+### Local CPU Fourier 2B (`mode="local"`, default)
+
+Runs the pinned 2.19 GB Q8_0 GGUF file locally on CPU via `transcribe-cpp`. Install the optional `fourier` extra and run the file example on a mono 16 kHz PCM16 WAV:
 
 ```bash
-python -m pip install 'pipecat-oruk[fourier]==0.1.0rc4'
+python -m pip install 'pipecat-oruk[fourier]'
 python examples/pipecat_local_file.py recording.wav --model fourier
 ```
 
-The first run downloads the original 2.19 GB Q8 file and verifies its SHA-256. Add `--offline` on subsequent runs to require the local cache. In a local Pipecat pipeline, place the service after `VADProcessor` at 16 kHz:
+The first run downloads the pinned 2.19 GB Q8 file and verifies its SHA-256. Add `--offline` on subsequent runs to require the local cache. In a local Pipecat pipeline, place the service after `VADProcessor` at 16 kHz:
 
 ```python
-from pipecat_oruk.fourier import FourierSTTService
+from pipecat_oruk import FourierSTTService
 
 stt = FourierSTTService()
 await stt.prewarm()
 ```
 
-Each detected utterance emits final English text. The service keeps the model loaded and starts a fresh decoding session for each speech window. A turn longer than 30 seconds splits near the quietest 20 ms in the last two seconds of the window. The package code is MIT. The [model terms](https://huggingface.co/oruk/oruk-fourier-2b#license) permit local noncommercial use. Commercial use or hosted/API serving requires a separate Oruk license.
+Each detected utterance emits final English text. The local service keeps the model loaded and starts a fresh decoding session for each speech window. A turn longer than 30 seconds splits near the quietest 20 ms in the last two seconds of the window. The package code is MIT. The [local model weights](https://huggingface.co/oruk/oruk-fourier-2b#license) are CC BY-NC 4.0 (local noncommercial use); commercial use can use `mode="hosted"` or obtain a separate Oruk license.
 
 ## Local Orukeet transcription
 
 The optional `OrukeetSTTService` runs the [Orukeet](https://huggingface.co/oruk/orukeet)
 INT8 ONNX model on CPU. It needs no API key and keeps audio on the machine running
-Pipecat. Install the local extra from the published `0.1.0rc3` release:
+Pipecat. Install the `local` extra:
 
 ```sh
-python -m pip install 'pipecat-oruk[local]==0.1.0rc3'
+python -m pip install 'pipecat-oruk[local]'
 python examples/pipecat_local_file.py recording.wav
 ```
 
@@ -192,6 +211,6 @@ python -m pytest -q
 python -m build
 ```
 
-The production browser check covers two consecutive turns, cancellation after an interim result, reconnection, and backend metering. Its 45-second recording and request receipts are in [the demonstration record](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md). A full spoken assistant using an LLM and TTS, including assistant barge-in, still needs separate verification. This package is a release candidate; it is not an upstream Pipecat release.
+The production browser check covers two consecutive turns, cancellation after an interim result, reconnection, and backend metering. Its 45-second recording and request receipts are in [the demonstration record](https://github.com/Oruk-AI/pipecat-oruk/blob/main/docs/DEMO.md). A full spoken assistant using an LLM and TTS, including assistant barge-in, still needs separate verification. This package is community-maintained by Oruk; it is not an upstream Pipecat release.
 Maintainers can follow [the release procedure](docs/RELEASING.md) to verify the
 artifacts before making a separate publishing decision.
